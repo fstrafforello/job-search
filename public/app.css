@@ -142,6 +142,7 @@ input[type=text], input[type=url], input[type=number], input[type=date], input[t
 textarea { resize: vertical; min-height: 90px; line-height: 1.5; }
 textarea.tall { min-height: 340px; }
 textarea.mono { font-family: var(--mono); font-size: 13px; }
+textarea.drop { outline: 2px dashed var(--accent); outline-offset: -4px; background: var(--accent-soft); }
 input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: transparent; }
 .form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
 .form-grid .wide { grid-column: 1 / -1; }

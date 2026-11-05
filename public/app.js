@@ -1,4 +1,4 @@
-import { $, $$, esc, api, toast, fmtDate, daysSince, relTime, download, copy, slug, form, confirmBox, md, visibleText } from './util.js';
+import { $, $$, esc, api, toast, fmtDate, daysSince, relTime, download, copy, slug, form, confirmBox, md, visibleText, readDocument, DOCUMENT_TYPES } from './util.js';
 import { columnChart, barList, installTooltips } from './charts.js';
 import { refreshLm, mountModelPicker } from './lmstudio.js';
 import { checkForUpdate } from './update.js';
@@ -282,6 +282,48 @@ function jobFields(j = {}) {
     <datalist id="sources"><option>LinkedIn</option><option>Indeed</option><option>Company website</option><option>Referral</option><option>Recruiter</option><option>Glassdoor</option></datalist>`;
 }
 
+/*
+ * Lets the user fill `textarea` from a PDF / Word / text file, via a file `input` or by dropping
+ * the file onto the textarea. Asks before replacing existing text.
+ */
+function fileImport({ input, textarea, what, onLoaded }) {
+  async function load(file) {
+    if (!file) return;
+    if (textarea.value.trim() && !(await confirmBox(`Replace the current ${what} with the text from "${file.name}"?`, { ok: 'Replace', danger: false }))) return;
+    const before = textarea.placeholder;
+    textarea.disabled = true;
+    textarea.placeholder = `Reading ${file.name}…`;
+    try {
+      const { text, format } = await readDocument(file);
+      textarea.value = text;
+      toast(format === 'pdf'
+        ? `Loaded ${file.name}. PDFs can lose some formatting, so give it a quick check.`
+        : `Loaded ${file.name}`);
+      onLoaded?.();
+    } catch (e) {
+      toast(e.message, true);
+    } finally {
+      textarea.disabled = false;
+      textarea.placeholder = before;
+      input.value = '';
+    }
+  }
+  input.accept = DOCUMENT_TYPES;
+  input.addEventListener('change', () => load(input.files[0]));
+  textarea.addEventListener('dragover', (e) => {
+    if (![...e.dataTransfer.types].includes('Files')) return;
+    e.preventDefault();
+    textarea.classList.add('drop');
+  });
+  textarea.addEventListener('dragleave', () => textarea.classList.remove('drop'));
+  textarea.addEventListener('drop', (e) => {
+    if (!e.dataTransfer.files.length) return;
+    e.preventDefault();
+    textarea.classList.remove('drop');
+    load(e.dataTransfer.files[0]);
+  });
+}
+
 function readJobForm(formEl) {
   const data = Object.fromEntries(new FormData(formEl));
   data.tags = String(data.tags || '').split(',').map((t) => t.trim()).filter(Boolean);
@@ -294,8 +336,10 @@ function newJob() {
     <div class="page-head"><div><h1>Add a job</h1><p>Paste the job description — the AI can fill in the details for you.</p></div></div>
     <form id="job-form" class="grid">
       <div class="card">
-        <div class="card-head"><h2>Job description</h2><button type="button" class="btn" id="extract">✨ Auto-fill with AI</button></div>
-        <textarea name="description" class="tall" placeholder="Paste the full job posting here…" autofocus></textarea>
+        <div class="card-head"><h2>Job description</h2>
+          <div class="row"><label class="btn">From a file…<input type="file" id="jd-file" hidden></label>
+          <button type="button" class="btn" id="extract">✨ Auto-fill with AI</button></div></div>
+        <textarea name="description" class="tall" placeholder="Paste the full job posting here, or drop a PDF / Word file…" autofocus></textarea>
       </div>
       <div class="card">
         <h2>Details</h2>
@@ -313,6 +357,7 @@ function newJob() {
     </form>`;
 
   const f = $('#job-form');
+  fileImport({ input: $('#jd-file'), textarea: f.description, what: 'job description' });
   $('#extract').addEventListener('click', async (e) => {
     const btn = e.currentTarget;
     const description = f.description.value;
@@ -757,8 +802,8 @@ function profile() {
       </div></div>
       <div class="card">
         <div class="card-head"><h2>Resume</h2>
-          <label class="btn sm">Load .txt / .md file<input type="file" id="file" accept=".txt,.md,.markdown,text/plain" hidden></label></div>
-        <textarea name="resume" class="tall mono" placeholder="Paste your current resume as plain text or Markdown. (From a PDF or Word file: select all → copy → paste.)">${esc(p.resume)}</textarea>
+          <label class="btn sm">Load from PDF or Word…<input type="file" id="file" hidden></label></div>
+        <textarea name="resume" class="tall mono" placeholder="Click &quot;Load from PDF or Word…&quot;, drop your resume file here, or paste it as text.">${esc(p.resume)}</textarea>
       </div>
       <div class="grid cols-2">
         <div class="card"><h2>Additional background</h2>
@@ -770,11 +815,11 @@ function profile() {
     </form>`;
   const f = $('#pf');
   f.addEventListener('input', () => { $('#dirty').textContent = 'Unsaved changes'; });
-  $('#file').addEventListener('change', async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    f.resume.value = await file.text();
-    $('#dirty').textContent = 'Unsaved changes';
+  fileImport({
+    input: $('#file'),
+    textarea: f.resume,
+    what: 'resume',
+    onLoaded: () => { $('#dirty').textContent = 'Unsaved changes. Click Save profile'; },
   });
   f.addEventListener('submit', async (e) => {
     e.preventDefault();

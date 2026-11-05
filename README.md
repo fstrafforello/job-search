@@ -2,6 +2,7 @@
 
 A local, private dashboard for tracking job applications. A local LLM running in [LM Studio](https://lmstudio.ai) writes and edits your resumes, cover letters and other documents.
 
+- **Resume from PDF or Word:** load your resume from a `.pdf` or `.docx` file (or drop it in); it's converted to text on your computer. Job descriptions can be loaded from files too. Scanned (image-only) PDFs can't be read; the app tells you so.
 - **Jobs:** paste a job description and the AI fills in the title, company, location, salary and keywords. You can track status (saved → applied → screening → interview → offer / rejected / ghosted / withdrawn), notes, contacts, next actions and tags.
 - **AI Workspace (per job):** one-click fit analysis with a match score, ATS keyword gap check, tailored resume, cover letter, recruiter message, follow-up and thank-you emails, interview prep and salary negotiation. You can also chat freely. Your profile and the job description are sent with every request.
 - **Documents:** save any AI answer as a document, then edit it, ask the AI to revise it, copy it, download it as Markdown, or print / save it as PDF.
@@ -17,7 +18,7 @@ Everything is free and runs on your own computer. Nothing is sent to the interne
    - The first time, Windows may show *"Windows protected your PC"*, because the app isn't code-signed. Click **More info → Run anyway**.
    - Tip: right-click the exe → **Send to → Desktop (create shortcut)**, or pin the open app to the taskbar.
 3. Click **Start LM Studio** at the bottom left, pick your model, and click **Load model**.
-4. Go to **My Profile** and paste your resume, then add jobs.
+4. Go to **My Profile** and click **Load from PDF or Word…** (or drop your resume file in), then add jobs.
 
 Your data is saved in `%APPDATA%\Job Search Dashboard` (Settings → **Open data folder**). You can move the .exe anywhere; your data stays where it is.
 
@@ -71,10 +72,11 @@ If a release changes how data is stored (renamed or restructured fields), add a 
 
 ## Run from source (developers)
 
-Needs Node.js 22 or newer. The server itself has no dependencies to install.
+Needs Node.js 22 or newer.
 
-1. Start the dashboard:
+1. Install dependencies and start the dashboard:
    ```sh
+   npm install
    npm start        # or: node server.js
    ```
 2. Open http://127.0.0.1:5177.
@@ -82,7 +84,7 @@ Needs Node.js 22 or newer. The server itself has no dependencies to install.
    - click **Start LM Studio**. This runs `lms server start`, and opens the LM Studio app first if its background service isn't up.
    - pick a model from the dropdown (loaded and downloaded models are listed), or choose **Custom model ID…** and type one.
    - click **Load model** if it isn't loaded yet. This unloads other models first and uses the context length from Settings (default 8192).
-4. Fill in **My Profile** (paste your resume), then add jobs.
+4. Fill in **My Profile** (load or paste your resume), then add jobs.
 
 **Settings** has the same model picker plus **Unload all** and **Stop server**. It's also where you set the server URL, context length, temperature, max tokens, chat memory and weekly goal, and export or import your data.
 
@@ -108,6 +110,7 @@ lib/llm.js         LM Studio client + prompt building
 lib/lms.js         LM Studio CLI control (start/stop server, load/unload models)
 lib/updater.js     Checks GitHub Releases and installs updates in place
 lib/desktop.js     App window, log file, startup error page
+lib/extract.js     Reads PDF (unpdf / pdf.js) and Word .docx (mammoth) files into text
 assets/            Icon sources (SVG) and the generated icon.ico
 scripts/make-icons.mjs  Renders the icon PNGs/ICO
 scripts/pe.mjs     Exe header tweaks (no console window, drop Node's signature)

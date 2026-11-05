@@ -17,6 +17,20 @@ export async function api(path, { method = 'GET', body, signal } = {}) {
   return data;
 }
 
+export const DOCUMENT_TYPES = '.pdf,.docx,.txt,.md,.markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain';
+
+// Sends a PDF / Word / text file to the server and returns its text ({ text, format, pages? }).
+export async function readDocument(file) {
+  const res = await fetch('/api/extract-text', {
+    method: 'POST',
+    headers: { 'X-Filename': encodeURIComponent(file.name) },
+    body: file,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Could not read ${file.name}`);
+  return data;
+}
+
 export function toast(message, isError = false) {
   const el = document.createElement('div');
   el.className = 't' + (isError ? ' err' : '');

@@ -10,6 +10,7 @@ import { buildSystemPrompt, extractJobFields, streamChat, stripThinking } from '
 import * as lms from './lib/lms.js';
 import { createUpdater } from './lib/updater.js';
 import { logToFile, openAppWindow, openUrl, showErrorWindow } from './lib/desktop.js';
+import { extractDocumentText } from './lib/extract.js';
 import pkg from './package.json' with { type: 'json' };
 
 // Packaged as an .exe, the web files are embedded assets and data lives in the user's profile.
@@ -65,16 +66,21 @@ function send(res, status, data) {
   res.end(JSON.stringify(data));
 }
 
-async function readBody(req) {
+async function readRaw(req, limitMb = 20) {
   let size = 0;
   const chunks = [];
   for await (const c of req) {
     size += c.length;
-    if (size > 20 * 1024 * 1024) throw new HttpError(413, 'Request body too large');
+    if (size > limitMb * 1024 * 1024) throw new HttpError(413, `File is too large (max ${limitMb} MB)`);
     chunks.push(c);
   }
-  if (!chunks.length) return {};
-  try { return JSON.parse(Buffer.concat(chunks).toString('utf8')); }
+  return Buffer.concat(chunks);
+}
+
+async function readBody(req) {
+  const raw = await readRaw(req);
+  if (!raw.length) return {};
+  try { return JSON.parse(raw.toString('utf8')); }
   catch { throw new HttpError(400, 'Invalid JSON'); }
 }
 
@@ -114,10 +120,11 @@ function applyJobPatch(job, patch) {
 // ---------- routes ----------
 
 const routes = [];
-function route(method, pattern, handler) {
+// { raw: true } leaves the request body unread so the handler can take it as bytes.
+function route(method, pattern, handler, { raw = false } = {}) {
   const keys = [];
   const re = new RegExp('^' + pattern.replace(/:(\w+)/g, (_, k) => { keys.push(k); return '([^/]+)'; }) + '$');
-  routes.push({ method, re, keys, handler });
+  routes.push({ method, re, keys, handler, raw });
 }
 
 route('GET', '/api/bootstrap', () => ({
@@ -248,6 +255,14 @@ route('DELETE', '/api/threads/:tid/documents/:docId', ({ params }) => {
   store.save();
   return { ok: true };
 });
+
+// Reads a PDF / Word / text file sent as the raw request body; the name comes in X-Filename.
+route('POST', '/api/extract-text', async ({ req }) => {
+  const buffer = await readRaw(req);
+  if (!buffer.length) throw new HttpError(400, 'The file is empty');
+  const filename = decodeURIComponent(req.headers['x-filename'] || '');
+  return extractDocumentText(buffer, filename);
+}, { raw: true });
 
 route('PUT', '/api/profile', ({ body }) => {
   for (const k of Object.keys(store.db.profile)) if (k in body) store.db.profile[k] = String(body[k] ?? '');
@@ -399,7 +414,7 @@ const server = http.createServer(async (req, res) => {
   const m = pathname.match(r.re);
   const params = Object.fromEntries(r.keys.map((k, i) => [k, decodeURIComponent(m[i + 1])]));
   try {
-    const body = ['POST', 'PUT'].includes(req.method) ? await readBody(req) : {};
+    const body = !r.raw && ['POST', 'PUT'].includes(req.method) ? await readBody(req) : {};
     const result = await r.handler({ req, res, params, body });
     if (result !== undefined) send(res, 200, result);
   } catch (e) {

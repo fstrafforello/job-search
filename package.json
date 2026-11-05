@@ -25,5 +25,9 @@
   "devDependencies": {
     "esbuild": "^0.28.2",
     "rcedit": "^5.0.2"
+  },
+  "dependencies": {
+    "mammoth": "^1.13.0",
+    "unpdf": "^2.1.0"
   }
 }
