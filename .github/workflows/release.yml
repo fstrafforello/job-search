@@ -1,0 +1,39 @@
+# Pushing a version tag (npm run release:patch / release:minor) builds the Windows exe
+# and publishes it as a GitHub Release. Installed apps pick it up through the in-app updater.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+
+      - name: Check tag matches package.json version
+        shell: bash
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match package.json version $version"; exit 1
+          fi
+
+      - run: npm ci
+
+      - run: npm run build:exe
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/JobSearchDashboard.exe
+          generate_release_notes: true
+          fail_on_unmatched_files: true

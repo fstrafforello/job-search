@@ -1,0 +1,26 @@
+{
+  "name": "job-search-dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local job search dashboard with LM Studio-powered resume, cover letter and interview help",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fstrafforello/job-search"
+  },
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "build:exe": "node scripts/build-exe.mjs",
+    "release:patch": "npm version patch && git push --follow-tags",
+    "release:minor": "npm version minor && git push --follow-tags",
+    "release:major": "npm version major && git push --follow-tags"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  }
+}

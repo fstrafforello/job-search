@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Job Search</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%232a78d6'/><path d='M10 12h12v11H10z M13 12V9h6v3' fill='none' stroke='white' stroke-width='2.2' stroke-linejoin='round'/></svg>">
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand"><span class="brand-mark"></span>Job Search<span class="version" id="app-version"></span></div>
+      <nav>
+        <a href="#/dashboard" data-nav="dashboard">Dashboard</a>
+        <a href="#/jobs" data-nav="jobs">Jobs</a>
+        <a href="#/assistant" data-nav="assistant">AI Assistant</a>
+        <a href="#/profile" data-nav="profile">My Profile</a>
+        <a href="#/settings" data-nav="settings">Settings</a>
+      </nav>
+      <a class="btn primary block" href="#/jobs/new">+ Add job</a>
+      <div id="update-slot"></div>
+      <section class="lm-panel compact" aria-label="LM Studio">
+        <div class="lm-title"><span>LM Studio</span><a href="#/settings" class="small">Settings</a></div>
+        <div id="lm-sidebar"></div>
+      </section>
+    </aside>
+    <main id="main" tabindex="-1"></main>
+  </div>
+  <div id="toast" role="status" aria-live="polite"></div>
+  <div id="tooltip" class="tooltip" hidden></div>
+  <dialog id="dialog"></dialog>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
