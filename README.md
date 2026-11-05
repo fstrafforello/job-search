@@ -21,6 +21,17 @@ Everything is free and runs on your own computer. Nothing is sent to the interne
 
 Your data is saved in `%APPDATA%\Job Search Dashboard` (Settings → **Open data folder**). You can move the .exe anywhere; your data stays where it is.
 
+**If Windows blocks the download with no "Run anyway" option** (common on managed work computers), build and install it from the code instead. You need [Node.js](https://nodejs.org) 25.5+ and [Git](https://git-scm.com):
+
+```sh
+git clone https://github.com/fstrafforello/job-search.git
+cd job-search
+npm install
+npm run install-app      # builds the app, installs it for your user, adds Start menu + Desktop shortcuts
+```
+
+A copy built on your own computer isn't marked as downloaded, so it isn't blocked the same way. Check your employer's software policy first. Remove it with `npm run install-app -- --uninstall` (your data is kept).
+
 **Updates:** when a new version is out, an *Update available* card appears at the bottom left. Click **Update now**. The app downloads the new version, restarts itself, and keeps all your data. Get the first copy from the [Releases page](https://github.com/fstrafforello/job-search/releases/latest).
 
 ## Build the .exe
