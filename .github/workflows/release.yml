@@ -13,9 +13,11 @@ jobs:
   build:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # full history and tags, for the release notes
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 26
 
@@ -31,9 +33,24 @@ jobs:
 
       - run: npm run build:exe
 
+      # Written here rather than with GitHub's generated notes, whose API has failed with server errors.
+      - name: Write release notes
+        shell: bash
+        run: |
+          prev=$(git describe --tags --abbrev=0 "$GITHUB_REF_NAME^" 2>/dev/null || true)
+          {
+            echo "## What's new"
+            echo
+            git log --no-merges --format='- %s' ${prev:+$prev..}$GITHUB_REF_NAME | grep -vE '^- v?[0-9]+\.[0-9]+\.[0-9]+$' || true
+            echo
+            echo "**Download:** JobSearchDashboard.exe below. Already installed? The app offers this update by itself."
+          } > release-notes.md
+          cat release-notes.md
+
+      # Re-running is safe: an existing release for this tag is updated and the exe replaced.
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
           files: dist/JobSearchDashboard.exe
-          generate_release_notes: true
+          body_path: release-notes.md
           fail_on_unmatched_files: true
