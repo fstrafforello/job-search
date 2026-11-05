@@ -893,9 +893,33 @@ async function route() {
 
 async function boot() {
   const b = await api('/bootstrap');
-  Object.assign(state, { statuses: b.statuses, profile: b.profile, settings: b.settings, jobsCache: b.jobs, version: b.version, dataDir: b.dataDir });
+  Object.assign(state, { statuses: b.statuses, profile: b.profile, settings: b.settings, jobsCache: b.jobs, version: b.version, dataDir: b.dataDir, recovery: b.recovery });
   $('#app-version').textContent = `v${b.version}`;
   await route();
+}
+
+// Keeps the app running while this page is open (it quits when its window closes),
+// and tells the user if the app has stopped behind an open page.
+function keepAlive() {
+  const es = new EventSource('/api/alive');
+  let lost = null;
+  es.onopen = () => { clearTimeout(lost); $('#closed').hidden = true; };
+  es.onerror = () => {
+    clearTimeout(lost);
+    lost = setTimeout(() => { if (!document.body.dataset.updating) $('#closed').hidden = false; }, 8000);
+  };
+}
+
+function showRecoveryNotice(r) {
+  const dlg = $('#dialog');
+  dlg.innerHTML = `<form method="dialog"><h2>Your data was restored from a backup</h2>
+    <p>${r.restored
+      ? `The data file was damaged, so the copy saved on ${esc(fmtDate(r.backupDate))} was restored. Changes made after that may be missing.`
+      : 'The data file was damaged and no backup was available, so the app started empty.'}</p>
+    <p class="small muted">The damaged file was kept as <code>${esc(r.damaged)}</code>.</p>
+    <div class="row"><button class="btn primary" value="ok">OK</button></div></form>`;
+  dlg.onclose = null;
+  dlg.showModal();
 }
 
 installTooltips();
@@ -903,6 +927,8 @@ window.addEventListener('hashchange', route);
 boot().then(() => {
   mountModelPicker($('#lm-sidebar'), { ...modelBinding, compact: true });
   refreshLm();
+  keepAlive();
+  if (state.recovery) showRecoveryNotice(state.recovery);
   if (state.settings.checkUpdates) {
     checkForUpdate();
     setInterval(() => { if (state.settings.checkUpdates) checkForUpdate(); }, 6 * 60 * 60 * 1000);

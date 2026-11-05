@@ -5,10 +5,13 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
+import { setGuiSubsystem, stripSignature } from './pe.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DIST = path.join(ROOT, 'dist');
-const NAME = 'JobSearchDashboard' + (process.platform === 'win32' ? '.exe' : '');
+const IS_WIN = process.platform === 'win32';
+const NAME = 'JobSearchDashboard' + (IS_WIN ? '.exe' : '');
+const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
 const rel = (p) => path.relative(ROOT, p).replaceAll('\\', '/');
 
 fs.rmSync(DIST, { recursive: true, force: true });
@@ -35,19 +38,43 @@ for (const f of fs.readdirSync(path.join(ROOT, 'public'), { recursive: true })) 
   if (fs.statSync(full).isFile()) assets[f.replaceAll('\\', '/')] = rel(full);
 }
 
+// 3. On Windows, brand a copy of node.exe (icon, name, version) to build from.
+let base = null;
+if (IS_WIN) {
+  const { rcedit } = await import('rcedit');
+  base = path.join(DIST, 'base.exe');
+  fs.copyFileSync(process.execPath, base);
+  stripSignature(base);
+  const version = `${pkg.version}.0`;
+  await rcedit(base, {
+    icon: path.join(ROOT, 'assets', 'icon.ico'),
+    'file-version': version,
+    'product-version': version,
+    'version-string': {
+      FileDescription: 'Job Search Dashboard',
+      ProductName: 'Job Search Dashboard',
+      InternalName: 'JobSearchDashboard',
+      OriginalFilename: NAME,
+      CompanyName: '',
+      LegalCopyright: '',
+    },
+  });
+}
+
 const configFile = path.join(DIST, 'sea-config.json');
 fs.writeFileSync(configFile, JSON.stringify({
   main: rel(bundle),
   output: rel(path.join(DIST, NAME)),
+  ...(base && { executable: rel(base) }),
   disableExperimentalSEAWarning: true,
   useCodeCache: true,
   assets,
 }, null, 2));
 
-// 3. Produce the executable.
+// 4. Produce the executable. On Windows it's marked as a GUI program so no console window opens.
 execFileSync(process.execPath, ['--build-sea', rel(configFile)], { cwd: ROOT, stdio: 'inherit' });
+if (IS_WIN) setGuiSubsystem(path.join(DIST, NAME));
 
-fs.rmSync(bundle);
-fs.rmSync(configFile);
+for (const f of [bundle, configFile, base]) if (f) fs.rmSync(f);
 const size = (fs.statSync(path.join(DIST, NAME)).size / 1024 / 1024).toFixed(0);
 console.log(`\nBuilt dist/${NAME} (${size} MB, ${Object.keys(assets).length} embedded files)`);

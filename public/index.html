@@ -3,14 +3,18 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Job Search</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%232a78d6'/><path d='M10 12h12v11H10z M13 12V9h6v3' fill='none' stroke='white' stroke-width='2.2' stroke-linejoin='round'/></svg>">
+  <title>Job Search Dashboard</title>
+  <link rel="icon" href="/icon-32.png" sizes="32x32">
+  <link rel="icon" href="/icon-192.png" sizes="192x192">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#fcfcfb" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#1a1a19" media="(prefers-color-scheme: dark)">
   <link rel="stylesheet" href="/app.css">
 </head>
 <body>
   <div class="shell">
     <aside class="sidebar">
-      <div class="brand"><span class="brand-mark"></span>Job Search<span class="version" id="app-version"></span></div>
+      <div class="brand"><img class="brand-mark" src="/icon-192.png" alt="">Job Search<span class="version" id="app-version"></span></div>
       <nav>
         <a href="#/dashboard" data-nav="dashboard">Dashboard</a>
         <a href="#/jobs" data-nav="jobs">Jobs</a>
@@ -30,6 +34,10 @@
   <div id="toast" role="status" aria-live="polite"></div>
   <div id="tooltip" class="tooltip" hidden></div>
   <dialog id="dialog"></dialog>
+  <div id="closed" class="closed" hidden>
+    <div class="card"><h2>Job Search Dashboard has stopped</h2>
+      <p class="muted">Open it again from its icon. Your data is saved.</p></div>
+  </div>
   <script type="module" src="/app.js"></script>
 </body>
 </html>

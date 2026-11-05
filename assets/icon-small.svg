@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7158FF"/>
+      <stop offset="0.5" stop-color="#3D6BF2"/>
+      <stop offset="1" stop-color="#11B5C9"/>
+    </linearGradient>
+  </defs>
+  <rect x="0.5" y="0.5" width="31" height="31" rx="7.5" fill="url(#bg)"/>
+  <text x="15.6" y="22.6" text-anchor="middle" font-family="Segoe UI Variable Display, Segoe UI, Arial, sans-serif"
+        font-weight="800" font-size="18" letter-spacing="-0.8" fill="#fff">JS</text>
+</svg>

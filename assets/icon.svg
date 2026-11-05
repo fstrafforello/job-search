@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7158FF"/>
+      <stop offset="0.5" stop-color="#3D6BF2"/>
+      <stop offset="1" stop-color="#11B5C9"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.22" cy="0.12" r="0.85">
+      <stop offset="0" stop-color="#fff" stop-opacity="0.42"/>
+      <stop offset="0.6" stop-color="#fff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="ink" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#E3ECFF"/>
+    </linearGradient>
+    <filter id="lift" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="7" stdDeviation="7" flood-color="#1B1570" flood-opacity="0.45"/>
+    </filter>
+  </defs>
+  <rect x="10" y="10" width="236" height="236" rx="58" fill="url(#bg)"/>
+  <rect x="10" y="10" width="236" height="236" rx="58" fill="url(#glow)"/>
+  <rect x="11.5" y="11.5" width="233" height="233" rx="56.5" fill="none" stroke="#fff" stroke-opacity="0.28" stroke-width="3"/>
+  <text x="122" y="176" text-anchor="middle" font-family="Segoe UI Variable Display, Segoe UI, Arial, sans-serif"
+        font-weight="800" font-size="136" letter-spacing="-8" fill="url(#ink)" filter="url(#lift)">JS</text>
+  <path d="M199 34 C201 50 206 55 222 57 C206 59 201 64 199 80 C197 64 192 59 176 57 C192 55 197 50 199 34 Z" fill="#FFD966"/>
+  <circle cx="219" cy="88" r="5" fill="#FFD966" fill-opacity="0.85"/>
+</svg>

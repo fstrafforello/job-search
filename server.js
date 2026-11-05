@@ -9,6 +9,7 @@ import { createStore, STATUSES } from './lib/store.js';
 import { buildSystemPrompt, extractJobFields, streamChat, stripThinking } from './lib/llm.js';
 import * as lms from './lib/lms.js';
 import { createUpdater } from './lib/updater.js';
+import { logToFile, openAppWindow, openUrl, showErrorWindow } from './lib/desktop.js';
 import pkg from './package.json' with { type: 'json' };
 
 // Packaged as an .exe, the web files are embedded assets and data lives in the user's profile.
@@ -20,6 +21,21 @@ const DATA_DIR = PACKAGED
   : path.join(ROOT, 'data');
 const PORT = Number(process.env.PORT) || 5177;
 const HOST = process.env.HOST || '127.0.0.1';
+const LOG_FILE = path.join(DATA_DIR, 'app.log');
+// The app window's browser profile: machine-local, separate from the user's own browser.
+const WINDOW_PROFILE = path.join(process.env.LOCALAPPDATA || DATA_DIR, 'Job Search Dashboard', 'Window');
+
+// The packaged app has no console: log to a file, and explain startup failures in the app window.
+let listening = false;
+if (PACKAGED) {
+  logToFile(LOG_FILE);
+  console.log(`Starting Job Search Dashboard ${pkg.version}`);
+  process.on('uncaughtException', (e) => {
+    console.error(e);
+    if (!listening) showErrorWindow(e.message, { host: HOST, port: PORT, profileDir: WINDOW_PROFILE, logFile: LOG_FILE });
+  });
+}
+
 const DB_FILE = process.env.DB_FILE || path.join(DATA_DIR, 'db.json');
 const store = createStore(DB_FILE, { appVersion: pkg.version });
 const updater = createUpdater({
@@ -32,7 +48,8 @@ const JOB_FIELDS = ['title', 'company', 'location', 'workMode', 'url', 'salary',
   'notes', 'tags', 'appliedAt', 'matchScore', 'contact', 'nextAction', 'nextActionDate'];
 
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
-  '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.json': 'application/json' };
+  '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.json': 'application/json',
+  '.webmanifest': 'application/manifest+json' };
 
 class HttpError extends Error {
   constructor(status, message) { super(message); this.status = status; }
@@ -111,7 +128,38 @@ route('GET', '/api/bootstrap', () => ({
   generalDocuments: store.db.general.documents.length,
   version: pkg.version,
   dataDir: path.dirname(DB_FILE),
+  recovery: store.recovery,
 }));
+
+// The packaged app quits when its window is closed: each open page holds this event stream,
+// and the app exits once none has been connected for a little while.
+const AUTO_QUIT = PACKAGED && process.env.JSD_AUTO_QUIT !== '0';
+const openPages = new Set();
+let quitTimer = null;
+
+function scheduleQuit(ms) {
+  if (!AUTO_QUIT) return;
+  clearTimeout(quitTimer);
+  quitTimer = setTimeout(() => {
+    if (openPages.size || ['downloading', 'installing', 'restarting'].includes(updater.status().state)) return;
+    console.log('No window open, quitting');
+    process.exit(0);
+  }, ms);
+}
+
+route('GET', '/api/alive', ({ res }) => {
+  res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store' });
+  res.write('retry: 1000\n\n');
+  openPages.add(res);
+  clearTimeout(quitTimer);
+  const ping = setInterval(() => res.write(': ping\n\n'), 20000);
+  res.on('close', () => {
+    clearInterval(ping);
+    openPages.delete(res);
+    if (!openPages.size) scheduleQuit(15000);
+  });
+  return undefined;
+});
 
 route('GET', '/api/update/check', async ({ req }) => {
   const force = new URL(req.url, 'http://x').searchParams.has('force');
@@ -363,24 +411,23 @@ const server = http.createServer(async (req, res) => {
 
 const APP_URL = `http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`;
 
-function openBrowser(url) {
-  const [cmd, args] = process.platform === 'win32' ? ['cmd', ['/c', 'start', '', url]]
-    : process.platform === 'darwin' ? ['open', [url]] : ['xdg-open', [url]];
-  spawn(cmd, args, { detached: true, stdio: 'ignore', windowsHide: true }).on('error', () => {}).unref();
-}
-
 const shouldOpen = PACKAGED ? process.env.OPEN_BROWSER !== '0' : process.env.OPEN_BROWSER === '1';
 const AFTER_UPDATE = process.env.JSD_AFTER_UPDATE === '1';
 
+// The .exe opens its own app window; from source, the default browser.
+function openWindow() {
+  if (PACKAGED) openAppWindow(APP_URL, WINDOW_PROFILE);
+  else openUrl(APP_URL);
+}
+
 // Called by the updater once the new exe is in place: free the port, start the new version, exit.
+// The open window reconnects to the new version by itself.
 function restartInto(exe) {
   server.close();
   server.closeAllConnections();
-  // `start` gives the new version its own console window, like a normal double-click.
-  spawn('cmd', ['/c', 'start', '', exe], {
+  spawn(exe, [], {
     detached: true,
     stdio: 'ignore',
-    windowsHide: true,
     env: { ...process.env, JSD_AFTER_UPDATE: '1', OPEN_BROWSER: '0' },
   }).unref();
   setTimeout(() => process.exit(0), 300);
@@ -394,30 +441,19 @@ server.on('error', (e) => {
     setTimeout(() => server.listen(PORT, HOST), 500);
     return;
   }
-  // Most likely the dashboard is already running (e.g. the .exe was double-clicked twice).
+  // Most likely the app is already running (e.g. its icon was double-clicked again): show another window.
   console.log(`Job Search Dashboard is already running at ${APP_URL}`);
-  if (shouldOpen) openBrowser(APP_URL);
+  if (shouldOpen) openWindow();
   setTimeout(() => process.exit(0), PACKAGED ? 3000 : 0);
 });
 
 server.listen(PORT, HOST, () => {
-  if (PACKAGED) {
-    process.title = 'Job Search Dashboard';
-    console.log([
-      '',
-      '  Job Search Dashboard is running.',
-      '',
-      `  Open it in your browser:  ${APP_URL}`,
-      `  Your data is saved in:    ${DATA_DIR}`,
-      '',
-      '  Keep this window open while you use the dashboard.',
-      '  Close it to stop the dashboard.',
-      '',
-    ].join('\n'));
-  } else {
-    console.log(`Job search dashboard → ${APP_URL}`);
-    console.log(`LM Studio endpoint     → ${store.db.settings.lmUrl}`);
-  }
-  if (shouldOpen && !AFTER_UPDATE) openBrowser(APP_URL);
+  listening = true;
+  console.log(`Job Search Dashboard ${pkg.version} running at ${APP_URL}`);
+  console.log(`Data: ${DATA_DIR} | LM Studio: ${store.db.settings.lmUrl}`);
+  if (store.recovery) console.warn('Data file was damaged:', store.recovery);
+  if (shouldOpen && !AFTER_UPDATE) openWindow();
+  // If no window ever connects (e.g. it failed to open), don't linger in the background.
+  scheduleQuit(AFTER_UPDATE ? 60000 : 120000);
   setTimeout(updater.cleanup, 3000);
 });

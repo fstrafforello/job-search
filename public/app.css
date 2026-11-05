@@ -73,7 +73,10 @@ button, input, select, textarea { font: inherit; color: inherit; }
 }
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 16px; padding: 0 8px; }
 .brand .version { margin-left: auto; font-size: 11px; font-weight: 500; color: var(--text-3); }
-.brand-mark { width: 22px; height: 22px; border-radius: 6px; background: var(--accent); }
+.brand-mark { width: 24px; height: 24px; }
+.closed { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; background: rgb(0 0 0 / .45); padding: 16px; }
+.closed[hidden] { display: none; }
+.closed .card { max-width: 380px; text-align: center; }
 .sidebar nav { display: flex; flex-direction: column; gap: 2px; }
 .sidebar nav a { padding: 8px 10px; border-radius: 8px; color: var(--text-2); text-decoration: none; font-weight: 500; }
 .sidebar nav a:hover { background: var(--surface-2); color: var(--text); }

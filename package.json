@@ -13,6 +13,7 @@
     "start": "node server.js",
     "dev": "node --watch server.js",
     "build:exe": "node scripts/build-exe.mjs",
+    "icons": "node scripts/make-icons.mjs",
     "release:patch": "npm version patch && git push --follow-tags",
     "release:minor": "npm version minor && git push --follow-tags",
     "release:major": "npm version major && git push --follow-tags"
@@ -21,6 +22,7 @@
     "node": ">=22"
   },
   "devDependencies": {
-    "esbuild": "^0.28.2"
+    "esbuild": "^0.28.2",
+    "rcedit": "^5.0.2"
   }
 }

@@ -13,9 +13,9 @@ Everything is free and runs on your own computer. Nothing is sent to the interne
 ## For users (Windows)
 
 1. Download and install **LM Studio** (free) from https://lmstudio.ai. Open it once and download a model. Search for something like *Qwen3 8B* or *Gemma 3 12B*; bigger models write better but need a stronger computer.
-2. Double-click **JobSearchDashboard.exe**. Your browser opens the dashboard.
+2. Double-click **JobSearchDashboard.exe**. The dashboard opens in its own window. Close the window to quit.
    - The first time, Windows may show *"Windows protected your PC"*, because the app isn't code-signed. Click **More info → Run anyway**.
-   - A small black window stays open while the dashboard runs. Close it to quit.
+   - Tip: right-click the exe → **Send to → Desktop (create shortcut)**, or pin the open app to the taskbar.
 3. Click **Start LM Studio** at the bottom left, pick your model, and click **Load model**.
 4. Go to **My Profile** and paste your resume, then add jobs.
 
@@ -28,9 +28,13 @@ Your data is saved in `%APPDATA%\Job Search Dashboard` (Settings → **Open data
 Needs Node.js 25.5 or newer on the build machine. End users don't need Node.
 
 ```sh
-npm install          # installs esbuild (build-time only)
+npm install          # installs esbuild and rcedit (build-time only)
 npm run build:exe    # → dist/JobSearchDashboard.exe (~100 MB, includes the Node runtime)
 ```
+
+The exe is a normal windowed Windows program (no console) with the icon from `assets/icon.ico`. When started, it opens the dashboard in a Microsoft Edge app window (Chrome or the default browser as fallbacks). That window uses its own profile in `%LOCALAPPDATA%\Job Search Dashboard\Window`. The app quits about 15 seconds after its last window closes. Logs go to `%APPDATA%\Job Search Dashboard\app.log`. If startup fails, the error is shown in the app window.
+
+To change the icon, edit `assets/icon.svg` (and `icon-small.svg` for 16–32 px), then run `npm run icons` to regenerate `assets/icon.ico` and the `public/icon-*.png` files (needs Edge).
 
 ## Publish a new version
 
@@ -92,6 +96,10 @@ lib/store.js       JSON file persistence
 lib/llm.js         LM Studio client + prompt building
 lib/lms.js         LM Studio CLI control (start/stop server, load/unload models)
 lib/updater.js     Checks GitHub Releases and installs updates in place
+lib/desktop.js     App window, log file, startup error page
+assets/            Icon sources (SVG) and the generated icon.ico
+scripts/make-icons.mjs  Renders the icon PNGs/ICO
+scripts/pe.mjs     Exe header tweaks (no console window, drop Node's signature)
 .github/workflows/release.yml  Builds and publishes the exe when a v* tag is pushed
 scripts/build-exe.mjs  Bundles everything into a single executable
 public/            Single-page app (vanilla JS, no build step)

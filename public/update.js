@@ -62,6 +62,7 @@ async function install(mb) {
     return;
   }
   installing = true;
+  document.body.dataset.updating = '1'; // the app restarts; don't show "has stopped"
   $$buttons(true);
   const progress = $('#upd-progress');
   const target = info.latest;
@@ -77,6 +78,7 @@ async function install(mb) {
       progress.innerHTML = '<div class="lm-job"><span class="spin"></span>Installing…</div>';
     } else if (s.state === 'error') {
       installing = false;
+      delete document.body.dataset.updating;
       toast(s.message, true);
       render();
       return;
