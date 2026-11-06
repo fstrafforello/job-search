@@ -1,0 +1,40 @@
+# On every push: run the tests and build the app on Windows and on a Mac, without releasing anything.
+# The built apps are kept for a week under the run's "Artifacts", e.g. to try the Mac app before a release.
+name: Check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 26
+
+      - run: npm ci
+
+      - run: npm test
+
+      - run: npm run build:exe
+        env:
+          JSD_GOOGLE_CLIENT_ID: ${{ secrets.JSD_GOOGLE_CLIENT_ID }}
+          JSD_GOOGLE_CLIENT_SECRET: ${{ secrets.JSD_GOOGLE_CLIENT_SECRET }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-${{ matrix.os }}
+          path: |
+            dist/*.exe
+            dist/*.zip
+          retention-days: 7

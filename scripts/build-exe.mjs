@@ -1,4 +1,5 @@
-// Builds dist/JobSearchDashboard(.exe): one double-clickable file with the server and web UI inside.
+// Builds the app with the server and web UI inside: dist/JobSearchDashboard.exe on Windows,
+// dist/JobSearchDashboard-macOS-<arch>.zip (holding "Job Search Dashboard.app") on a Mac.
 // Usage: npm run build:exe   (needs Node >= 25.5 for --build-sea, and esbuild from devDependencies)
 import fs from 'node:fs';
 import path from 'node:path';
@@ -10,6 +11,7 @@ import { setGuiSubsystem, stripSignature } from './pe.mjs';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DIST = path.join(ROOT, 'dist');
 const IS_WIN = process.platform === 'win32';
+const IS_MAC = process.platform === 'darwin';
 const NAME = 'JobSearchDashboard' + (IS_WIN ? '.exe' : '');
 const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
 const rel = (p) => path.relative(ROOT, p).replaceAll('\\', '/');
@@ -69,6 +71,14 @@ if (IS_WIN) {
   });
 }
 
+// On a Mac, Node's own binary is signed: the signature has to come off before the app is put inside,
+// and the result is signed again "ad hoc" (no developer identity), which Apple Silicon requires to run it.
+if (IS_MAC) {
+  base = path.join(DIST, 'base');
+  fs.copyFileSync(process.execPath, base);
+  execFileSync('codesign', ['--remove-signature', base]);
+}
+
 const configFile = path.join(DIST, 'sea-config.json');
 fs.writeFileSync(configFile, JSON.stringify({
   main: rel(bundle),
@@ -84,5 +94,59 @@ execFileSync(process.execPath, ['--build-sea', rel(configFile)], { cwd: ROOT, st
 if (IS_WIN) setGuiSubsystem(path.join(DIST, NAME));
 
 for (const f of [bundle, configFile, base]) if (f) fs.rmSync(f);
-const size = (fs.statSync(path.join(DIST, NAME)).size / 1024 / 1024).toFixed(0);
-console.log(`\nBuilt dist/${NAME} (${size} MB, ${Object.keys(assets).length} embedded files)`);
+const output = IS_MAC ? makeMacApp(path.join(DIST, NAME)) : path.join(DIST, NAME);
+const size = (fs.statSync(output).size / 1024 / 1024).toFixed(0);
+console.log(`\nBuilt ${rel(output)} (${size} MB, ${Object.keys(assets).length} embedded files)`);
+
+// 5. Mac: wrap the program in "Job Search Dashboard.app" (icon, name, version) and zip it for download.
+// The app isn't signed with an Apple Developer ID, so the first time macOS asks the user to allow it.
+function makeMacApp(binary) {
+  const app = path.join(DIST, 'Job Search Dashboard.app');
+  const contents = path.join(app, 'Contents');
+  fs.mkdirSync(path.join(contents, 'MacOS'), { recursive: true });
+  fs.mkdirSync(path.join(contents, 'Resources'), { recursive: true });
+  execFileSync('codesign', ['--force', '--sign', '-', binary]);
+  fs.renameSync(binary, path.join(contents, 'MacOS', NAME));
+
+  const iconset = path.join(DIST, 'icon.iconset');
+  fs.mkdirSync(iconset);
+  for (const size of [16, 32, 128, 256, 512]) {
+    for (const scale of [1, 2]) {
+      const px = Math.min(size * scale, 512); // the largest source image is 512 px
+      const out = path.join(iconset, `icon_${size}x${size}${scale === 2 ? '@2x' : ''}.png`);
+      execFileSync('sips', ['-z', String(px), String(px), path.join(ROOT, 'public', 'icon-512.png'), '--out', out], { stdio: 'ignore' });
+    }
+  }
+  execFileSync('iconutil', ['-c', 'icns', iconset, '-o', path.join(contents, 'Resources', 'icon.icns')]);
+  fs.rmSync(iconset, { recursive: true });
+
+  const xml = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  const entries = {
+    CFBundleName: 'Job Search Dashboard',
+    CFBundleDisplayName: 'Job Search Dashboard',
+    CFBundleIdentifier: 'io.github.fstrafforello.job-search',
+    CFBundleExecutable: NAME,
+    CFBundleIconFile: 'icon',
+    CFBundlePackageType: 'APPL',
+    CFBundleShortVersionString: pkg.version,
+    CFBundleVersion: pkg.version,
+    LSMinimumSystemVersion: '13.0',
+    NSHumanReadableCopyright: 'Copyright 2026 Francesco Strafforello. Apache License 2.0.',
+  };
+  const lines = Object.entries(entries).map(([k, v]) => `  <key>${k}</key><string>${xml(v)}</string>`);
+  fs.writeFileSync(path.join(contents, 'Info.plist'), [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">',
+    '<plist version="1.0"><dict>',
+    ...lines,
+    // No Dock icon or menu bar: the app's window is a browser window, and the app quits when it closes.
+    '  <key>LSUIElement</key><true/>',
+    '</dict></plist>',
+    '',
+  ].join('\n'));
+
+  execFileSync('codesign', ['--force', '--deep', '--sign', '-', app], { stdio: 'inherit' });
+  const zip = path.join(DIST, `JobSearchDashboard-macOS-${process.arch}.zip`);
+  execFileSync('ditto', ['-c', '-k', '--keepParent', app, zip]);
+  return zip;
+}

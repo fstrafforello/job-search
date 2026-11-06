@@ -56,6 +56,8 @@ const fake = http.createServer(async (req, res) => {
 let createStore;
 let createSync;
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'jsd-sync-'));
+// Windows tests the real DPAPI encryption; elsewhere (CI on a Mac) the Keychain may be locked, so use a file.
+if (process.platform !== 'win32') process.env.JSD_TOKEN_STORE = 'file';
 
 before(async () => {
   await new Promise((r) => fake.listen(0, '127.0.0.1', r));
@@ -134,7 +136,7 @@ test('the sign-in is saved encrypted and survives a restart', async () => {
   const c = computer('c');
   await signIn(c, 'casey');
   const saved = JSON.parse(fs.readFileSync(path.join(c.dir, 'token.json'), 'utf8'));
-  assert.notEqual(saved.refreshToken, 'rt-casey', 'not stored in plain text');
+  if (process.platform === 'win32') assert.notEqual(saved.refreshToken, 'rt-casey', 'not stored in plain text');
   // A new app start on the same computer picks the sign-in up again.
   const again = createSync({ store: c.store, tokenFile: path.join(c.dir, 'token.json'), redirectUri: 'http://127.0.0.1:1/cb' });
   for (let i = 0; i < 50 && !again.status().signedIn; i++) await new Promise((r) => setTimeout(r, 100));

@@ -1,5 +1,5 @@
 # Pushing a version tag (npm run release:patch / release:minor) builds the Windows exe
-# and publishes it as a GitHub Release. Installed apps pick it up through the in-app updater.
+# and the Mac app, and publishes them as a GitHub Release. Installed apps pick it up through the in-app updater.
 name: Release
 
 on:
@@ -59,4 +59,30 @@ jobs:
         with:
           files: dist/JobSearchDashboard.exe
           body_path: release-notes.md
+          fail_on_unmatched_files: true
+
+  # The Apple Silicon Mac app, added to the release the Windows job just published.
+  build-mac:
+    needs: build
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 26
+
+      - run: npm ci
+
+      - run: npm test
+
+      - run: npm run build:exe
+        env:
+          JSD_GOOGLE_CLIENT_ID: ${{ secrets.JSD_GOOGLE_CLIENT_ID }}
+          JSD_GOOGLE_CLIENT_SECRET: ${{ secrets.JSD_GOOGLE_CLIENT_SECRET }}
+
+      - name: Add the Mac app to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/JobSearchDashboard-macOS-arm64.zip
           fail_on_unmatched_files: true

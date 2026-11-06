@@ -11,24 +11,23 @@ import * as lms from './lib/lms.js';
 import * as engine from './lib/engine.js';
 import { LOCAL_SETTINGS } from './lib/merge.js';
 import { createSync } from './lib/sync.js';
+import * as paths from './lib/paths.js';
 import { createUpdater } from './lib/updater.js';
 import { logToFile, openAppWindow, openUrl, showErrorWindow } from './lib/desktop.js';
 import { extractDocumentText } from './lib/extract.js';
 import pkg from './package.json' with { type: 'json' };
 
-// Packaged as an .exe, the web files are embedded assets and data lives in the user's profile.
+// Packaged (the .exe / Mac app), the web files are embedded assets and data lives in the user's profile.
 const PACKAGED = isSea();
 const ROOT = PACKAGED ? path.dirname(process.execPath) : path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(ROOT, 'public');
-const DATA_DIR = process.env.JSD_DATA_DIR || (PACKAGED
-  ? path.join(process.env.APPDATA || path.join(os.homedir(), '.config'), 'Job Search Dashboard')
-  : path.join(ROOT, 'data'));
+const DATA_DIR = process.env.JSD_DATA_DIR || (PACKAGED ? paths.dataDir() : path.join(ROOT, 'data'));
 const PORT = Number(process.env.PORT) || 5177;
 const HOST = process.env.HOST || '127.0.0.1';
 const LOG_FILE = path.join(DATA_DIR, 'app.log');
-// The app window's browser profile: machine-local, separate from the user's own browser.
-// Things that belong to this computer only (never in a synced data folder).
-const LOCAL_DIR = process.env.JSD_LOCAL_DIR || path.join(process.env.LOCALAPPDATA || DATA_DIR, 'Job Search Dashboard');
+// Things that belong to this computer only (never in a synced data folder), like the app window's
+// browser profile, kept separate from the user's own browser.
+const LOCAL_DIR = process.env.JSD_LOCAL_DIR || paths.machineDir();
 const WINDOW_PROFILE = path.join(LOCAL_DIR, 'Window');
 
 // The packaged app has no console: log to a file, and explain startup failures in the app window.
@@ -229,11 +228,16 @@ route('GET', '/api/sync/callback', async ({ req, res }) => {
 // Folders of the usual sync apps that exist on this computer, as one-click suggestions.
 function syncFolderSuggestions() {
   const home = os.homedir();
+  // On a Mac the sync apps live in ~/Library/CloudStorage/<App>-<account>.
+  const cloud = path.join(home, 'Library', 'CloudStorage');
+  let cloudDirs = [];
+  try { cloudDirs = fs.readdirSync(cloud).map((d) => path.join(cloud, d)); } catch { /* not a Mac, or none */ }
+  const inCloud = (prefix, sub = '') => cloudDirs.filter((d) => path.basename(d).startsWith(prefix)).map((d) => path.join(d, sub));
   const candidates = [
-    ['OneDrive', process.env.OneDrive || process.env.OneDriveConsumer || process.env.OneDriveCommercial],
-    ['Google Drive', ...['G:\\My Drive', path.join(home, 'Google Drive'), path.join(home, 'My Drive')]],
-    ['Dropbox', path.join(home, 'Dropbox')],
-    ['iCloud Drive', path.join(home, 'iCloudDrive')],
+    ['OneDrive', process.env.OneDrive || process.env.OneDriveConsumer || process.env.OneDriveCommercial, ...inCloud('OneDrive')],
+    ['Google Drive', ...['G:\\My Drive', path.join(home, 'Google Drive'), path.join(home, 'My Drive')], ...inCloud('GoogleDrive', 'My Drive')],
+    ['Dropbox', path.join(home, 'Dropbox'), ...inCloud('Dropbox')],
+    ['iCloud Drive', path.join(home, 'iCloudDrive'), path.join(home, 'Library', 'Mobile Documents', 'com~apple~CloudDocs')],
   ];
   const out = [];
   for (const [label, ...dirs] of candidates) {
@@ -252,7 +256,9 @@ route('GET', '/api/data-folder', () => ({
 
 function resolveDataDir(dir) {
   const d = String(dir || '').trim().replace(/^"|"$/g, '');
-  if (!d || !path.isAbsolute(d)) throw new HttpError(400, 'Enter a full folder path, e.g. C:\\Users\\you\\OneDrive\\Job Search Dashboard');
+  if (!d || !path.isAbsolute(d)) {
+    throw new HttpError(400, `Enter a full folder path, e.g. ${process.platform === 'win32' ? 'C:\\Users\\you\\OneDrive\\Job Search Dashboard' : '/Users/you/Documents/Job Search Dashboard'}`);
+  }
   return path.resolve(d);
 }
 
@@ -292,6 +298,13 @@ route('POST', '/api/data-folder', ({ body }) => {
 
 // Windows' own folder picker (a browser page can't ask for a folder path).
 route('POST', '/api/pick-folder', async () => {
+  if (process.platform === 'darwin') {
+    const child = spawn('osascript', ['-e', 'POSIX path of (choose folder with prompt "Choose where Job Search Dashboard keeps your data")']);
+    let out = '';
+    child.stdout.on('data', (d) => { out += d; });
+    await new Promise((resolve) => { child.on('close', resolve); child.on('error', resolve); });
+    return { dir: out.trim().replace(/\/$/, '') || null }; // empty when cancelled
+  }
   if (process.platform !== 'win32') throw new HttpError(400, 'Type the folder path instead');
   const script = `[Console]::OutputEncoding = [Text.Encoding]::UTF8
 Add-Type -AssemblyName System.Windows.Forms

@@ -43,7 +43,7 @@ export const startSetup = (model) => act('install', model ? { model } : {});
 
 // Bytes still to download for a model (engine included, minus what's already partly there).
 function setupSize(s, model) {
-  return (model.installed ? 0 : model.size) + (s.runtime ? 0 : 62 * 1024 * 1024);
+  return (model.installed ? 0 : model.size) + (s.runtimeBytes || 0);
 }
 
 function headline(s, model) {
@@ -68,7 +68,7 @@ export function mountEnginePanel(el, { getSettings, compact = false, onPickModel
     const s = eng.status;
     if (!s) { el.innerHTML = '<div class="lm-head"><span class="dot"></span><span>Checking…</span></div>'; return; }
     if (!s.supported) {
-      el.innerHTML = '<div class="lm-job">The built-in AI needs 64-bit Windows. Switch to LM Studio in Settings → AI.</div>';
+      el.innerHTML = '<div class="lm-job">The built-in AI needs 64-bit Windows or a Mac. Switch to LM Studio in Settings → AI.</div>';
       return;
     }
     const settings = getSettings();
@@ -97,7 +97,7 @@ export function mountEnginePanel(el, { getSettings, compact = false, onPickModel
     } else if (sv.state === 'starting' || sv.starting) {
       body = '<div class="lm-job"><span class="spin"></span>Loading the model into memory. This takes a few seconds (up to a minute the very first time).</div>';
     } else if (!compact && sv.state === 'running') {
-      body = `<div class="small muted">Running on the ${sv.backend === 'cpu' ? 'CPU' : 'graphics card (falls back to the CPU if needed)'} · context ${Math.round(sv.ctx / 1024)}k tokens</div>`;
+      body = `<div class="small muted">Running on the ${sv.gpu ? 'graphics card (falls back to the CPU if needed)' : 'CPU'} · context ${Math.round(sv.ctx / 1024)}k tokens</div>`;
     }
 
     el.innerHTML = `<div class="lm-head"><span class="dot ${dot}"></span><span>${esc(text)}</span></div>${body}${compact ? '' : details(s, settings, model)}`;
@@ -127,7 +127,7 @@ export function mountEnginePanel(el, { getSettings, compact = false, onPickModel
       </label>`).join('');
     return `
       <div class="choices" style="margin-top:12px">${rows}</div>
-      <label class="row small" style="gap:6px;margin-top:10px"><input type="checkbox" name="builtinGpu" ${settings.builtinGpu !== false ? 'checked' : ''}> Use the graphics card when possible (faster)</label>
+      ${s.canUseGpu ? `<label class="row small" style="gap:6px;margin-top:10px"><input type="checkbox" name="builtinGpu" ${settings.builtinGpu !== false ? 'checked' : ''}> Use the graphics card when possible (faster)</label>` : ''}
       ${s.gpuFallback && settings.builtinGpu !== false ? `<div class="lm-job">The graphics card didn't work last time, so the AI runs on the CPU.
         <button class="btn sm ghost" data-act="retry-gpu">Try the graphics card again</button></div>` : ''}
       <p class="small muted">Files are kept in <code>${esc(s.dir)}</code>, separate from your data. They stay when the app updates.
@@ -161,7 +161,7 @@ export async function chooseEngine({ current = '' } = {}) {
     <div class="choices">
       <label class="choice"><input type="radio" name="engine" value="builtin" ${supported ? '' : 'disabled'} ${current !== 'lmstudio' && supported ? 'checked' : ''}>
         <div><strong>Built-in AI${supported ? ' (recommended)' : ''}</strong>
-        <div class="small muted">${supported ? `Nothing else to install. ${download} Works best with 8 GB of memory or more.` : 'Needs 64-bit Windows.'}</div></div></label>
+        <div class="small muted">${supported ? `Nothing else to install. ${download} Works best with 8 GB of memory or more.` : 'Needs 64-bit Windows or a Mac.'}</div></div></label>
       <label class="choice"><input type="radio" name="engine" value="lmstudio" ${current === 'lmstudio' || !supported ? 'checked' : ''}>
         <div><strong>LM Studio</strong>
         <div class="small muted">Use your own LM Studio app and pick any model you like. Good if you already use it or want bigger models.</div></div></label>
