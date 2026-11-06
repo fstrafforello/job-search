@@ -1,6 +1,7 @@
 import { $, $$, esc, api, toast, fmtDate, daysSince, relTime, download, copy, slug, form, confirmBox, md, visibleText, readDocument, DOCUMENT_TYPES } from './util.js';
 import { columnChart, barList, installTooltips } from './charts.js';
-import { refreshLm, mountModelPicker } from './lmstudio.js';
+import { refreshLm, mountModelPicker, setLmActive } from './lmstudio.js';
+import { refreshEngine, mountEnginePanel, setEngineActive, startSetup, chooseEngine } from './engine.js';
 import { checkForUpdate } from './update.js';
 
 const main = $('#main');
@@ -149,7 +150,9 @@ async function dashboard() {
       <div class="card empty">
         <h2>Let's get your search set up</h2>
         <p>1. Paste your resume into <a href="#/profile">My Profile</a> so the AI knows your background.<br>
-        2. Install <a href="https://lmstudio.ai" target="_blank" rel="noopener">LM Studio</a> (free), download a model in it, then click <strong>Start LM Studio</strong> at the bottom left and load the model.<br>
+        2. ${state.settings.engine === 'lmstudio'
+          ? 'Click <strong>Start LM Studio</strong> at the bottom left and load a model.'
+          : 'Set up the AI at the bottom left: the built-in AI downloads once and then works offline. (Prefer <a href="https://lmstudio.ai" target="_blank" rel="noopener">LM Studio</a>? Switch in <a href="#/settings">Settings</a>.)'}<br>
         3. <a href="#/jobs/new">Add your first job</a> by pasting its description.</p>
       </div>`;
     return;
@@ -835,18 +838,32 @@ async function settings() {
     <div class="page-head"><div><h1>Settings</h1></div></div>
     <form id="sf" class="grid" style="max-width:760px">
       <div class="card">
-        <h2>LM Studio</h2>
+        <h2>AI</h2>
+        <div class="segmented" role="radiogroup" aria-label="How the AI runs">
+          <label><input type="radio" name="engine" value="builtin" ${s.engine === 'builtin' ? 'checked' : ''}><span>Built-in AI</span></label>
+          <label><input type="radio" name="engine" value="lmstudio" ${s.engine === 'lmstudio' ? 'checked' : ''}><span>LM Studio</span></label>
+        </div>
+        ${s.engine === 'builtin' ? `
+          <p class="small muted">Runs a model that comes with the app, with nothing else to install.</p>
+          <div class="lm-panel" id="engine-settings"></div>`
+        : s.engine === 'lmstudio' ? `
+          <p class="small muted">Uses your own <a href="https://lmstudio.ai" target="_blank" rel="noopener">LM Studio</a> app and any model you've downloaded in it.</p>
+          <div class="form-grid">
+            <label class="field wide">Server URL
+              <div class="row" style="flex-wrap:nowrap"><input type="text" name="lmUrl" value="${esc(s.lmUrl)}" placeholder="http://localhost:1234"><button type="button" class="btn" id="save-url">Apply</button></div></label>
+            <div class="field wide">Model<div class="lm-panel" id="lm-settings"></div></div>
+          </div>
+          <p class="small muted">"Start LM Studio" starts its local server, opening the LM Studio app if needed. "Load model" unloads other models first to free memory.
+            Use <em>Custom model ID…</em> for any model identifier LM Studio accepts.</p>`
+        : '<p class="small muted">Pick how the AI should run. Both are free and stay on this computer.</p>'}
+        <h3 style="margin-top:18px">Options for both</h3>
         <div class="form-grid">
-          <label class="field wide">Server URL
-            <div class="row" style="flex-wrap:nowrap"><input type="text" name="lmUrl" value="${esc(s.lmUrl)}" placeholder="http://localhost:1234"><button type="button" class="btn" id="save-url">Apply</button></div></label>
-          <div class="field wide">Model<div class="lm-panel" id="lm-settings"></div></div>
-          <label class="field">Context length when loading (0 = model default)<input type="number" name="contextLength" min="0" step="1024" value="${s.contextLength}"></label>
+          <label class="field">Context length (0 = default, 8k for the built-in AI)<input type="number" name="contextLength" min="0" step="1024" value="${s.contextLength}"></label>
           <label class="field">Temperature<input type="number" name="temperature" step="0.1" min="0" max="2" value="${s.temperature}"></label>
           <label class="field">Max reply tokens (0 = model default)<input type="number" name="maxTokens" min="0" step="256" value="${s.maxTokens}"></label>
           <label class="field">Chat memory (messages)<input type="number" name="historyLimit" min="0" max="50" value="${s.historyLimit}"></label>
         </div>
-        <p class="small muted">"Start LM Studio" starts its local server, opening the LM Studio app if needed. "Load model" unloads other models first to free memory.
-          A resume plus a job description needs a context length of 8k tokens or more. Use <em>Custom model ID…</em> for any model identifier LM Studio accepts.</p>
+        <p class="small muted">A resume plus a job description needs a context length of 8k tokens or more. Longer contexts use more memory.</p>
       </div>
       <div class="card"><h2>Goals</h2>
         <div class="form-grid"><label class="field">Weekly application goal<input type="number" name="weeklyGoal" min="0" value="${s.weeklyGoal}"></label></div></div>
@@ -859,10 +876,14 @@ async function settings() {
         </div>
       </div>
       <div class="card"><h2>Your data</h2>
-        <p class="small muted" style="margin-top:0">Saved on this computer in <code>${esc(state.dataDir)}</code>. Updating the app keeps your data,
-          and a copy from before each update is kept in the same folder. Use Export to make your own backup or move to another computer.</p>
-        <div class="row"><button type="button" class="btn" id="export">Export JSON</button>
-          <button type="button" class="btn ghost" id="open-folder">Open data folder</button>
+        <p class="small muted" style="margin-top:0">${state.customDataDir ? 'Saved in the folder you chose' : 'Saved on this computer'}: <code>${esc(state.dataDir)}</code>.
+          Updating the app keeps your data, and a copy from before each update is kept in the same folder.</p>
+        <p class="small muted">To use the same data on more than one computer, put it in a folder that OneDrive, Google Drive or Dropbox keeps in sync,
+          and choose that folder on each computer. Use the app on one computer at a time: close it on one before opening it on the other.</p>
+        <div class="row"><button type="button" class="btn" id="change-folder">Change folder…</button>
+          ${state.customDataDir ? '<button type="button" class="btn ghost" id="default-folder">Back to this computer only</button>' : ''}
+          <button type="button" class="btn ghost" id="open-folder">Open data folder</button></div>
+        <div class="row" style="margin-top:10px"><button type="button" class="btn" id="export">Export JSON</button>
           <label class="btn">Import JSON…<input type="file" id="import" accept=".json,application/json" hidden></label></div>
       </div>
       <div class="card"><h2>About</h2>
@@ -875,17 +896,36 @@ async function settings() {
     </form>`;
 
   const f = $('#sf');
-  mountModelPicker($('#lm-settings'), modelBinding);
-  $('#save-url').addEventListener('click', async () => {
-    state.settings = await api('/settings', { method: 'PUT', body: { lmUrl: f.lmUrl.value } });
-    toast('Server URL saved');
-    refreshLm();
-  });
+  f.querySelectorAll('input[name="engine"]').forEach((r) => r.addEventListener('change', () => switchEngine(r.value).then(settings)));
+  if (s.engine === 'builtin') {
+    mountEnginePanel($('#engine-settings'), {
+      getSettings: () => state.settings,
+      onPickModel: async (builtinModel) => {
+        state.settings = await api('/settings', { method: 'PUT', body: { builtinModel } });
+        refreshEngine();
+      },
+      onGpuChange: async (on) => {
+        state.settings = await api('/settings', { method: 'PUT', body: { builtinGpu: on } });
+        toast(on ? 'The AI will use the graphics card when possible' : 'The AI will run on the CPU only');
+        refreshEngine();
+      },
+    });
+  }
+  if (s.engine === 'lmstudio') {
+    mountModelPicker($('#lm-settings'), modelBinding);
+    $('#save-url').addEventListener('click', async () => {
+      state.settings = await api('/settings', { method: 'PUT', body: { lmUrl: f.lmUrl.value } });
+      toast('Server URL saved');
+      refreshLm();
+    });
+  }
   f.addEventListener('submit', async (e) => {
     e.preventDefault();
-    state.settings = await api('/settings', { method: 'PUT', body: Object.fromEntries(new FormData(f)) });
+    const body = Object.fromEntries(new FormData(f));
+    delete body.builtinGpu; // saved when ticked; an unticked box isn't in the form data
+    state.settings = await api('/settings', { method: 'PUT', body });
     toast('Settings saved');
-    refreshLm();
+    if (state.settings.engine === 'lmstudio') refreshLm(); else refreshEngine();
   });
   $('#check-updates').addEventListener('click', () => checkForUpdate({ force: true, quiet: false }));
   $('#auto-updates').addEventListener('change', async (e) => {
@@ -893,6 +933,11 @@ async function settings() {
     toast(e.target.checked ? 'Will check for updates automatically' : 'Automatic update checks turned off');
   });
   $('#open-folder').addEventListener('click', () => api('/open-data-folder', { method: 'POST' }));
+  $('#change-folder').addEventListener('click', () => changeDataFolder());
+  $('#default-folder')?.addEventListener('click', async () => {
+    const { default: dir } = await api('/data-folder');
+    changeDataFolder(dir);
+  });
   $('#export').addEventListener('click', async () => {
     download(`job-search-backup-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(await api('/export'), null, 2), 'application/json');
   });
@@ -904,11 +949,133 @@ async function settings() {
       const r = await api('/import', { method: 'POST', body: JSON.parse(await file.text()) });
       toast(`Imported ${r.jobs} jobs`);
       await boot();
+      mountAiSidebar();
     } catch (err) { toast(err.message, true); }
   });
 }
 
+// Shows a dialog with the given buttons ([value, label, primary?]) and resolves with the clicked value ('' if dismissed).
+function ask(html, buttons) {
+  const dlg = $('#dialog');
+  dlg.innerHTML = `<form method="dialog">${html}<div class="row">${buttons.map(([v, label, primary]) =>
+    `<button class="btn ${primary ? 'primary' : ''}" value="${esc(v)}">${esc(label)}</button>`).join('')}</div></form>`;
+  dlg.onclose = null;
+  dlg.returnValue = '';
+  dlg.showModal();
+  return new Promise((r) => dlg.addEventListener('close', () => r(dlg.returnValue), { once: true }));
+}
+
+// Moves the data to another folder, or switches to the data already there (e.g. synced from another computer).
+// `preset` skips the folder question (used by "Back to this computer only").
+async function changeDataFolder(preset) {
+  let dir = preset;
+  if (!dir) {
+    const info = await api('/data-folder');
+    const dlg = $('#dialog');
+    dlg.innerHTML = `<form method="dialog"><h2>Where should your data be kept?</h2>
+      <p class="small muted" style="margin-top:0">To use the same data on several computers, pick a folder that OneDrive, Google Drive or Dropbox keeps in sync, then pick the same folder on the other computers.</p>
+      ${info.suggestions.length ? `<div class="row" style="gap:6px;margin-bottom:10px;justify-content:flex-start"><span class="small muted">Synced folders on this computer:</span>${info.suggestions.map((s) =>
+        `<button type="button" class="chip" data-dir="${esc(s.dir)}">${esc(s.label)}</button>`).join('')}</div>` : ''}
+      <label class="field">Folder
+        <div class="row" style="flex-wrap:nowrap"><input type="text" name="dir" value="${esc(info.current)}" spellcheck="false"><button type="button" class="btn" id="browse">Browse…</button></div></label>
+      <div class="row"><button class="btn" value="cancel">Cancel</button><button class="btn primary" value="ok">Continue</button></div></form>`;
+    const input = $('input[name="dir"]', dlg);
+    dlg.querySelectorAll('[data-dir]').forEach((b) => b.addEventListener('click', () => { input.value = b.dataset.dir; }));
+    $('#browse', dlg).addEventListener('click', async () => {
+      try {
+        const r = await api('/pick-folder', { method: 'POST' });
+        if (r.dir) input.value = r.dir;
+      } catch (e) { toast(e.message, true); }
+    });
+    dlg.onclose = null;
+    dlg.returnValue = '';
+    dlg.showModal();
+    await new Promise((r) => dlg.addEventListener('close', r, { once: true }));
+    if (dlg.returnValue !== 'ok') return;
+    dir = input.value;
+  }
+
+  let check;
+  try {
+    check = await api('/data-folder/check', { method: 'POST', body: { dir } });
+  } catch (e) { toast(e.message, true); return; }
+  if (check.same) { toast('That is already your data folder'); return; }
+
+  let mode;
+  if (check.existing?.unreadable) {
+    mode = await ask(`<h2>That folder has a data file the app can't read</h2>
+      <p>Replace it with the data on this computer? The old file is kept next to it as a copy.</p>`,
+    [['', 'Cancel'], ['move', 'Replace it', true]]);
+  } else if (check.existing) {
+    const n = check.existing.jobs;
+    mode = await ask(`<h2>That folder already has Job Search data</h2>
+      <p><strong>${n} job${n === 1 ? '' : 's'}</strong>, last changed ${esc(fmtDate(check.existing.modified))}. It may come from another computer.</p>
+      <p class="small muted">"Use that data" shows the data from that folder here. Your data on this computer stays where it is, untouched.
+        "Replace it" overwrites that folder's data with this computer's (a copy of the old file is kept).</p>`,
+    [['', 'Cancel'], ['move', "Replace it with this computer's data"], ['use', 'Use that data', true]]);
+  } else {
+    mode = await ask(`<h2>Move your data?</h2><p>Your jobs, documents and settings will be saved in <code>${esc(check.dir)}</code> from now on.</p>
+      <p class="small muted">The current file stays where it is as a backup.</p>`,
+    [['', 'Cancel'], ['move', 'Move my data', true]]);
+  }
+  if (!mode) return;
+  try {
+    await api('/data-folder', { method: 'POST', body: { dir: check.dir, mode } });
+  } catch (e) { toast(e.message, true); return; }
+  toast(mode === 'use' ? 'Now using the data in that folder' : 'Your data is now saved in that folder');
+  await boot();
+  mountAiSidebar();
+}
+
+// Warnings about where the data is, shown once when the app opens.
+function showDataNotices() {
+  if (state.locationProblem) {
+    ask(`<h2>Your data folder isn't available</h2>
+      <p><code>${esc(state.locationProblem)}</code> can't be reached. Is the drive connected and OneDrive / Google Drive / Dropbox running?</p>
+      <p class="small muted">For now the app shows the data saved on this computer, and changes are saved there. Restart the app once the folder is back.</p>`,
+    [['ok', 'OK', true]]);
+  } else if (state.openElsewhere) {
+    ask(`<h2>This data is open on another computer</h2>
+      <p>It looks like the app is also open on <strong>${esc(state.openElsewhere)}</strong>. Close it there first: if both make changes at the same time, some changes can be lost.</p>`,
+    [['ok', 'OK', true]]);
+  }
+}
+
 // ---------- shell ----------
+
+// The sidebar's AI panel follows the chosen engine; only that engine's status is polled.
+function mountAiSidebar() {
+  const el = $('#ai-sidebar');
+  const engine = state.settings.engine;
+  $('#ai-title').textContent = engine === 'builtin' ? 'Built-in AI' : engine === 'lmstudio' ? 'LM Studio' : 'AI';
+  setEngineActive(engine === 'builtin');
+  setLmActive(engine === 'lmstudio');
+  if (engine === 'builtin') mountEnginePanel(el, { getSettings: () => state.settings, compact: true });
+  else if (engine === 'lmstudio') mountModelPicker(el, { ...modelBinding, compact: true });
+  else {
+    el.innerHTML = `<div class="lm-job">Choose how the AI runs to use the AI features.</div>
+      <div class="lm-actions"><button class="btn sm primary" id="choose-ai">Set up AI</button></div>`;
+    $('#choose-ai', el).addEventListener('click', () => askEngine());
+  }
+}
+
+async function switchEngine(engine) {
+  state.settings = await api('/settings', { method: 'PUT', body: { engine } });
+  mountAiSidebar();
+  if (engine === 'builtin') {
+    const s = await refreshEngine();
+    const model = s?.models.find((m) => m.id === state.settings.builtinModel);
+    if (s?.supported && (!s.runtime || !model?.installed) && s.download?.state !== 'running') startSetup();
+  }
+}
+
+async function askEngine() {
+  const choice = await chooseEngine({ current: state.settings.engine });
+  if (!choice) return;
+  await switchEngine(choice);
+  toast(choice === 'builtin' ? 'Setting up the built-in AI. You can keep working while it downloads.' : 'Using LM Studio. Start it from the sidebar.');
+  if (location.hash === '#/settings') settings();
+}
 
 // Shared by the sidebar and Settings pickers; both re-render from the same LM Studio state.
 const modelBinding = {
@@ -945,7 +1112,8 @@ async function route() {
 
 async function boot() {
   const b = await api('/bootstrap');
-  Object.assign(state, { statuses: b.statuses, profile: b.profile, settings: b.settings, jobsCache: b.jobs, version: b.version, dataDir: b.dataDir, recovery: b.recovery });
+  Object.assign(state, { statuses: b.statuses, profile: b.profile, settings: b.settings, jobsCache: b.jobs, version: b.version, dataDir: b.dataDir, recovery: b.recovery,
+    customDataDir: b.customDataDir, locationProblem: b.locationProblem, openElsewhere: b.openElsewhere });
   $('#app-version').textContent = `v${b.version}`;
   await route();
 }
@@ -956,6 +1124,11 @@ function keepAlive() {
   const es = new EventSource('/api/alive');
   let lost = null;
   es.onopen = () => { clearTimeout(lost); $('#closed').hidden = true; };
+  // A sync client (OneDrive, Google Drive…) brought in changes from another computer.
+  es.addEventListener('data-changed', async () => {
+    await boot();
+    toast('Updated with changes from another computer');
+  });
   es.onerror = () => {
     clearTimeout(lost);
     lost = setTimeout(() => { if (!document.body.dataset.updating) $('#closed').hidden = false; }, 8000);
@@ -977,10 +1150,11 @@ function showRecoveryNotice(r) {
 installTooltips();
 window.addEventListener('hashchange', route);
 boot().then(() => {
-  mountModelPicker($('#lm-sidebar'), { ...modelBinding, compact: true });
-  refreshLm();
+  mountAiSidebar();
   keepAlive();
   if (state.recovery) showRecoveryNotice(state.recovery);
+  else if (state.locationProblem || state.openElsewhere) showDataNotices();
+  else if (!state.settings.engine) askEngine();
   if (state.settings.checkUpdates) {
     checkForUpdate();
     setInterval(() => { if (state.settings.checkUpdates) checkForUpdate(); }, 6 * 60 * 60 * 1000);

@@ -5,6 +5,7 @@ export const lm = { running: null, models: [], disk: [], cli: false, app: false,
 const listeners = new Set();
 let timer = null;
 let lastJobKey = null;
+let active = false;
 
 const JOB_LABEL = { start: 'Starting LM Studio', stop: 'Stopping server', load: 'Loading model', unload: 'Unloading models' };
 
@@ -22,8 +23,15 @@ export async function refreshLm() {
   lastJobKey = key;
   for (const fn of listeners) fn();
   clearTimeout(timer);
-  timer = setTimeout(refreshLm, j?.state === 'running' ? 1500 : 20000);
+  if (active) timer = setTimeout(refreshLm, j?.state === 'running' ? 1500 : 20000);
   return lm;
+}
+
+// Polls only while LM Studio is the chosen engine.
+export function setLmActive(on) {
+  active = on;
+  clearTimeout(timer);
+  if (on) refreshLm();
 }
 
 export async function lmAction(action, body) {

@@ -1,6 +1,6 @@
 # Job Search Dashboard
 
-A local, private dashboard for tracking job applications. A local LLM running in [LM Studio](https://lmstudio.ai) writes and edits your resumes, cover letters and other documents.
+A local, private dashboard for tracking job applications. An AI running on your own computer writes and edits your resumes, cover letters and other documents: either the **built-in AI**, which the app sets up with one click, or your own [LM Studio](https://lmstudio.ai).
 
 - **Resume from PDF or Word:** load your resume from a `.pdf` or `.docx` file (or drop it in); it's converted to text on your computer. Job descriptions can be loaded from files too. Scanned (image-only) PDFs can't be read; the app tells you so.
 - **Jobs:** paste a job description and the AI fills in the title, company, location, salary and keywords. You can track status (saved → applied → screening → interview → offer / rejected / ghosted / withdrawn), notes, contacts, next actions and tags.
@@ -13,14 +13,19 @@ Everything is free and runs on your own computer. Nothing is sent to the interne
 
 ## For users (Windows)
 
-1. Download and install **LM Studio** (free) from https://lmstudio.ai. Open it once and download a model. Search for something like *Qwen3 8B* or *Gemma 3 12B*; bigger models write better but need a stronger computer.
-2. Double-click **JobSearchDashboard.exe**. The dashboard opens in its own window. Close the window to quit.
+1. Double-click **JobSearchDashboard.exe**. The dashboard opens in its own window. Close the window to quit.
    - The first time, Windows may show *"Windows protected your PC"*, because the app isn't code-signed. Click **More info → Run anyway**.
    - Tip: right-click the exe → **Send to → Desktop (create shortcut)**, or pin the open app to the taskbar.
-3. Click **Start LM Studio** at the bottom left, pick your model, and click **Load model**.
-4. Go to **My Profile** and click **Load from PDF or Word…** (or drop your resume file in), then add jobs.
+2. The app asks how the AI should run:
+   - **Built-in AI (recommended):** nothing else to install. The app downloads the AI engine ([llama.cpp](https://github.com/ggml-org/llama.cpp)) and the Qwen3.5 4B model once (about 2.6 GB), then works offline. It uses your graphics card when it can and the CPU otherwise. Works best with 8 GB of memory or more; Settings → AI also has a *Light* model (Qwen3.5 2B, 1.2 GB) for older computers.
+   - **LM Studio:** install [LM Studio](https://lmstudio.ai) (free) and download a model in it (e.g. *Qwen3 8B* or *Gemma 3 12B*). Then click **Start LM Studio** at the bottom left, pick your model and click **Load model**.
 
-Your data is saved in `%APPDATA%\Job Search Dashboard` (Settings → **Open data folder**). You can move the .exe anywhere; your data stays where it is.
+   You can switch between them at any time in **Settings → AI**.
+3. Go to **My Profile** and click **Load from PDF or Word…** (or drop your resume file in), then add jobs.
+
+Your data is saved in `%APPDATA%\Job Search Dashboard` (Settings → **Open data folder**). You can move the .exe anywhere; your data stays where it is. The built-in AI's files are in `%LOCALAPPDATA%\Job Search Dashboard\Built-in AI` and stay there through updates.
+
+**Same data on several computers:** in Settings → **Your data**, click **Change folder…** and pick a folder that OneDrive, Google Drive or Dropbox keeps in sync. On the other computer, pick the same folder and choose **Use that data**. Use the app on one computer at a time. It warns you if the data is open elsewhere, and when the sync app brings in changes from the other computer, the open app reloads them.
 
 **If Windows blocks the download with no "Run anyway" option** (common on managed work computers), build and install it from the code instead. You need [Node.js](https://nodejs.org) 25.5+ and [Git](https://git-scm.com):
 
@@ -80,13 +85,13 @@ Needs Node.js 22 or newer.
    npm start        # or: node server.js
    ```
 2. Open http://127.0.0.1:5177.
-3. In the **LM Studio** panel at the bottom of the sidebar:
+3. Choose **Built-in AI** or **LM Studio** when asked (or later in Settings → AI). For LM Studio, use the panel at the bottom of the sidebar:
    - click **Start LM Studio**. This runs `lms server start`, and opens the LM Studio app first if its background service isn't up.
    - pick a model from the dropdown (loaded and downloaded models are listed), or choose **Custom model ID…** and type one.
    - click **Load model** if it isn't loaded yet. This unloads other models first and uses the context length from Settings (default 8192).
 4. Fill in **My Profile** (load or paste your resume), then add jobs.
 
-**Settings** has the same model picker plus **Unload all** and **Stop server**. It's also where you set the server URL, context length, temperature, max tokens, chat memory and weekly goal, and export or import your data.
+**Settings → AI** switches between the built-in AI and LM Studio. For the built-in AI it lists the Standard and Light models (download / remove) and the graphics card option. For LM Studio it has the same model picker plus **Unload all** and **Stop server**. Settings is also where you set the server URL, context length, temperature, max tokens, chat memory and weekly goal, and export or import your data.
 
 The start/load/stop controls use LM Studio's `lms` CLI, which is installed with LM Studio at `~/.lmstudio/bin`. Set `LMS_CLI` or `LMSTUDIO_APP` if yours lives elsewhere. Without the CLI you can still start the server and load models in the LM Studio app; the dashboard detects them either way.
 
@@ -98,15 +103,18 @@ The start/load/stop controls use LM Studio's `lms` CLI, which is installed with 
 | `HOST`    | `127.0.0.1`      | Bind address (keep local, there's no auth) |
 | `DB_FILE` | `data/db.json` (source) / `%APPDATA%\Job Search Dashboard\db.json` (.exe) | Where your data is stored |
 | `OPEN_BROWSER` | `1` for the .exe, `0` from source | Open the browser on start |
+| `JSD_DATA_DIR` | `data` (source) / `%APPDATA%\Job Search Dashboard` (.exe) | Default data folder. Also holds the log and the pointer to a folder chosen in Settings |
+| `JSD_ENGINE_DIR` | `%LOCALAPPDATA%\Job Search Dashboard\Built-in AI` | Where the built-in AI's engine and models are downloaded |
 
 From source, all data lives in `data/db.json`, which is git-ignored. A copy of the previous version is kept in `data/db.backup.json` each time the server starts.
 
 ## Layout
 
 ```
-server.js          HTTP server, REST API, LM Studio streaming proxy
-lib/store.js       JSON file persistence
-lib/llm.js         LM Studio client + prompt building
+server.js          HTTP server, REST API, AI streaming proxy, data folder
+lib/store.js       JSON file persistence, data folder switching, reloads changes made by sync apps
+lib/llm.js         AI client (built-in or LM Studio) + prompt building
+lib/engine.js      Built-in AI: downloads llama.cpp + the model (pinned SHA-256), runs llama-server
 lib/lms.js         LM Studio CLI control (start/stop server, load/unload models)
 lib/updater.js     Checks GitHub Releases and installs updates in place
 lib/desktop.js     App window, log file, startup error page
@@ -119,6 +127,8 @@ scripts/build-exe.mjs  Bundles everything into a single executable
 scripts/licenses.mjs   Generates public/third-party-licenses.txt (also run by build:exe)
 public/            Single-page app (vanilla JS, no build step)
   app.js           Views, AI quick actions, stats
+  engine.js        Built-in AI panel and the first-start AI choice
+  lmstudio.js      LM Studio panel and model picker
   util.js          API helper, Markdown renderer, dialogs
   charts.js        SVG/HTML charts + tooltips
 ```

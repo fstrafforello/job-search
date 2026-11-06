@@ -105,6 +105,24 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .spin { width: 12px; height: 12px; margin-top: 2px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; flex: none; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* AI engine choice: a two-way switch on Settings, option cards in the chooser and model list */
+h3 { font-size: 13px; font-weight: 650; margin-bottom: 8px; }
+.segmented { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; padding: 2px; background: var(--surface-2); margin-bottom: 4px; }
+.segmented label { position: relative; }
+.segmented input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.segmented span { display: block; padding: 5px 14px; border-radius: 6px; font-weight: 550; font-size: 13px; color: var(--text-2); }
+.segmented input:checked + span { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
+.segmented input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 1px; }
+.choices { display: flex; flex-direction: column; gap: 8px; }
+.choice { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; cursor: pointer; font-size: 13px; line-height: 1.4; }
+.choice:hover { background: var(--surface-2); }
+.choice.on { border-color: var(--accent); background: var(--accent-soft); }
+.choice input { margin-top: 3px; accent-color: var(--accent); }
+.choice .grow { flex: 1; min-width: 0; }
+.choice .small { font-weight: 400; }
+.engine-choice .choices { margin: 14px 0 4px; }
+dialog:has(.engine-choice) { width: min(500px, calc(100vw - 32px)); }
+
 main { padding: 28px 32px 60px; min-width: 0; outline: none; max-width: 1280px; }
 .page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 22px; flex-wrap: wrap; }
 .page-head p { margin: 4px 0 0; color: var(--text-2); }

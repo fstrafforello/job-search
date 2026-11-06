@@ -6,8 +6,9 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { isSea, getAsset } from 'node:sea';
 import { createStore, STATUSES } from './lib/store.js';
-import { buildSystemPrompt, extractJobFields, streamChat, stripThinking } from './lib/llm.js';
+import { buildSystemPrompt, extractJobFields, streamChat, stripThinking, usesBuiltin } from './lib/llm.js';
 import * as lms from './lib/lms.js';
+import * as engine from './lib/engine.js';
 import { createUpdater } from './lib/updater.js';
 import { logToFile, openAppWindow, openUrl, showErrorWindow } from './lib/desktop.js';
 import { extractDocumentText } from './lib/extract.js';
@@ -17,9 +18,9 @@ import pkg from './package.json' with { type: 'json' };
 const PACKAGED = isSea();
 const ROOT = PACKAGED ? path.dirname(process.execPath) : path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(ROOT, 'public');
-const DATA_DIR = PACKAGED
+const DATA_DIR = process.env.JSD_DATA_DIR || (PACKAGED
   ? path.join(process.env.APPDATA || path.join(os.homedir(), '.config'), 'Job Search Dashboard')
-  : path.join(ROOT, 'data');
+  : path.join(ROOT, 'data'));
 const PORT = Number(process.env.PORT) || 5177;
 const HOST = process.env.HOST || '127.0.0.1';
 const LOG_FILE = path.join(DATA_DIR, 'app.log');
@@ -37,8 +38,29 @@ if (PACKAGED) {
   });
 }
 
-const DB_FILE = process.env.DB_FILE || path.join(DATA_DIR, 'db.json');
-const store = createStore(DB_FILE, { appVersion: pkg.version });
+// The data can live in another folder (e.g. one synced by OneDrive or Google Drive). That choice is kept
+// in a small pointer file in the default folder, which always stays on this computer.
+const LOCATION_FILE = path.join(DATA_DIR, 'location.json');
+// Windows paths are case-insensitive and may use either slash.
+const samePath = (a, b) => {
+  const n = (p) => (process.platform === 'win32' ? path.resolve(p).toLowerCase() : path.resolve(p));
+  return n(a) === n(b);
+};
+let locationProblem = null; // the chosen folder, when it couldn't be reached at startup
+
+function chosenDataDir() {
+  try {
+    const { dataDir } = JSON.parse(fs.readFileSync(LOCATION_FILE, 'utf8'));
+    if (!dataDir) return null;
+    if (fs.existsSync(dataDir)) return dataDir;
+    locationProblem = dataDir;
+    console.warn(`Data folder ${dataDir} is not available; using ${DATA_DIR} for now`);
+  } catch { /* no custom folder */ }
+  return null;
+}
+
+const DB_FILE = process.env.DB_FILE || path.join(chosenDataDir() || DATA_DIR, 'db.json');
+const store = createStore(DB_FILE, { appVersion: pkg.version, onExternalChange: () => notifyPages('data-changed') });
 const updater = createUpdater({
   version: pkg.version,
   repo: pkg.repository.url.match(/github\.com\/([^/]+\/[^/.]+)/)[1],
@@ -134,14 +156,110 @@ route('GET', '/api/bootstrap', () => ({
   statuses: STATUSES,
   generalDocuments: store.db.general.documents.length,
   version: pkg.version,
-  dataDir: path.dirname(DB_FILE),
+  dataDir: path.dirname(store.file),
+  defaultDataDir: DATA_DIR,
+  customDataDir: !process.env.DB_FILE && !samePath(path.dirname(store.file), DATA_DIR),
+  locationProblem,
+  openElsewhere: store.openElsewhere(),
   recovery: store.recovery,
 }));
+
+// ---------- data folder ----------
+
+// Folders of the usual sync apps that exist on this computer, as one-click suggestions.
+function syncFolderSuggestions() {
+  const home = os.homedir();
+  const candidates = [
+    ['OneDrive', process.env.OneDrive || process.env.OneDriveConsumer || process.env.OneDriveCommercial],
+    ['Google Drive', ...['G:\\My Drive', path.join(home, 'Google Drive'), path.join(home, 'My Drive')]],
+    ['Dropbox', path.join(home, 'Dropbox')],
+    ['iCloud Drive', path.join(home, 'iCloudDrive')],
+  ];
+  const out = [];
+  for (const [label, ...dirs] of candidates) {
+    const dir = dirs.find((d) => d && fs.existsSync(d));
+    if (dir) out.push({ label, dir: path.join(dir, 'Job Search Dashboard') });
+  }
+  return out;
+}
+
+route('GET', '/api/data-folder', () => ({
+  current: path.dirname(store.file),
+  default: DATA_DIR,
+  suggestions: syncFolderSuggestions(),
+  locked: Boolean(process.env.DB_FILE),
+}));
+
+function resolveDataDir(dir) {
+  const d = String(dir || '').trim().replace(/^"|"$/g, '');
+  if (!d || !path.isAbsolute(d)) throw new HttpError(400, 'Enter a full folder path, e.g. C:\\Users\\you\\OneDrive\\Job Search Dashboard');
+  return path.resolve(d);
+}
+
+// What's in a folder before switching to it.
+route('POST', '/api/data-folder/check', ({ body }) => {
+  const dir = resolveDataDir(body.dir);
+  if (samePath(dir, path.dirname(store.file))) return { dir, same: true };
+  const file = path.join(dir, 'db.json');
+  if (!fs.existsSync(file)) return { dir, existing: null };
+  try {
+    const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+    return { dir, existing: { jobs: Array.isArray(data.jobs) ? data.jobs.length : 0, modified: fs.statSync(file).mtime.toISOString() } };
+  } catch {
+    return { dir, existing: { unreadable: true } };
+  }
+});
+
+// mode: 'move' writes this computer's data there; 'use' switches to the data already in that folder.
+route('POST', '/api/data-folder', ({ body }) => {
+  if (process.env.DB_FILE) throw new HttpError(400, 'The data file is set by the DB_FILE environment variable');
+  const dir = resolveDataDir(body.dir);
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    const probe = path.join(dir, `.write-test-${process.pid}`);
+    fs.writeFileSync(probe, '');
+    fs.rmSync(probe);
+  } catch (e) {
+    throw new HttpError(400, `Can't save to that folder (${e.code || e.message}). Pick a folder you can write to.`);
+  }
+  store.switchTo(path.join(dir, 'db.json'), { keepCurrent: body.mode !== 'use' });
+  if (samePath(dir, DATA_DIR)) fs.rmSync(LOCATION_FILE, { force: true });
+  else fs.writeFileSync(LOCATION_FILE, JSON.stringify({ dataDir: dir }, null, 2));
+  locationProblem = null;
+  console.log(`Data folder is now ${dir}`);
+  return { ok: true, dir };
+});
+
+// Windows' own folder picker (a browser page can't ask for a folder path).
+route('POST', '/api/pick-folder', async () => {
+  if (process.platform !== 'win32') throw new HttpError(400, 'Type the folder path instead');
+  const script = `[Console]::OutputEncoding = [Text.Encoding]::UTF8
+Add-Type -AssemblyName System.Windows.Forms
+$owner = New-Object System.Windows.Forms.Form -Property @{ TopMost = $true }
+$d = New-Object System.Windows.Forms.FolderBrowserDialog
+$d.Description = 'Choose where Job Search Dashboard keeps your data'
+$d.ShowNewFolderButton = $true
+if ($d.ShowDialog($owner) -eq 'OK') { [Console]::Out.Write($d.SelectedPath) }`;
+  const child = spawn('powershell.exe', ['-NoProfile', '-STA', '-NonInteractive', '-Command', '-'], { windowsHide: true });
+  let out = '';
+  child.stdout.on('data', (d) => { out += d; });
+  child.stdin.end(script);
+  await new Promise((resolve) => { child.on('close', resolve); child.on('error', resolve); });
+  return { dir: out.trim() || null };
+});
 
 // The packaged app quits when its window is closed: each open page holds this event stream,
 // and the app exits once none has been connected for a little while.
 const AUTO_QUIT = PACKAGED && process.env.JSD_AUTO_QUIT !== '0';
 const openPages = new Set();
+
+// Tells every open page about something (e.g. 'data-changed' after a sync client updated the data file).
+function notifyPages(event) {
+  for (const res of openPages) res.write(`event: ${event}
+data: 1
+
+`);
+}
 let quitTimer = null;
 
 function scheduleQuit(ms) {
@@ -180,7 +298,7 @@ route('POST', '/api/update/apply', () => updater.apply(restartInto));
 route('GET', '/api/update/status', () => updater.status());
 
 route('POST', '/api/open-data-folder', () => {
-  const dir = path.dirname(DB_FILE);
+  const dir = path.dirname(store.file);
   const [cmd, args] = process.platform === 'win32' ? ['explorer.exe', [dir]]
     : process.platform === 'darwin' ? ['open', [dir]] : ['xdg-open', [dir]];
   spawn(cmd, args, { detached: true, stdio: 'ignore' }).on('error', () => {}).unref();
@@ -272,6 +390,13 @@ route('PUT', '/api/profile', ({ body }) => {
 
 route('PUT', '/api/settings', ({ body }) => {
   const s = store.db.settings;
+  const before = { engine: s.engine, builtinModel: s.builtinModel, builtinGpu: s.builtinGpu, contextLength: s.contextLength };
+  if ('engine' in body) {
+    if (!['builtin', 'lmstudio'].includes(body.engine)) throw new HttpError(400, 'Unknown AI engine');
+    s.engine = body.engine;
+  }
+  if ('builtinModel' in body) s.builtinModel = engine.findModel(body.builtinModel).id;
+  if ('builtinGpu' in body) s.builtinGpu = body.builtinGpu === true || body.builtinGpu === 'on';
   if ('lmUrl' in body) s.lmUrl = String(body.lmUrl).trim() || 'http://localhost:1234';
   if ('model' in body) s.model = String(body.model || '');
   if ('checkUpdates' in body) s.checkUpdates = body.checkUpdates === true || body.checkUpdates === 'on';
@@ -279,13 +404,47 @@ route('PUT', '/api/settings', ({ body }) => {
     if (k in body && body[k] !== '' && !Number.isNaN(Number(body[k]))) s[k] = Number(body[k]);
   }
   store.save();
+  // Free the memory when switching to LM Studio; restart with the new options otherwise.
+  if (before.engine === 'builtin' && s.engine !== 'builtin') engine.stop();
+  else if (s.engine === 'builtin' && ['engine', 'builtinModel', 'builtinGpu', 'contextLength'].some((k) => before[k] !== s[k])) warmUpEngine(true);
   return s;
+});
+
+// Starts the built-in AI in the background so the first request doesn't wait for the model to load.
+function warmUpEngine(restart = false) {
+  const s = store.db.settings;
+  if (!usesBuiltin(s) || !engine.isReady(s.builtinModel)) return;
+  (restart ? engine.stop() : Promise.resolve()).then(() => engine.ensureRunning(s)).catch((e) => console.warn('Built-in AI:', e.message));
+}
+
+route('GET', '/api/engine/status', () => engine.status());
+route('POST', '/api/engine/install', ({ body }) => {
+  const s = store.db.settings;
+  const model = engine.findModel(body.model || s.builtinModel).id;
+  const d = engine.install(model);
+  // Once it's downloaded, use it and start it.
+  const wait = setInterval(() => {
+    if (d.state === 'running') return;
+    clearInterval(wait);
+    if (d.state === 'done' && s.builtinModel === model) warmUpEngine();
+  }, 1000);
+  return d;
+});
+route('POST', '/api/engine/cancel', () => engine.cancelInstall() || {});
+route('POST', '/api/engine/remove', ({ body }) => engine.removeModel(body.model));
+route('POST', '/api/engine/restart', ({ body }) => {
+  if (body.retryGpu) engine.resetGpuHint();
+  warmUpEngine(true);
+  return { ok: true };
 });
 
 route('GET', '/api/export', () => store.db);
 
 route('POST', '/api/import', ({ body }) => {
   if (!body || !Array.isArray(body.jobs)) throw new HttpError(400, 'Not a job search export file');
+  // How the AI runs belongs to this computer: keep it unless the backup has its own choice.
+  const { engine: eng, builtinModel, builtinGpu } = store.db.settings;
+  if (!body.settings?.engine) body.settings = { ...body.settings, engine: eng, builtinModel, builtinGpu };
   store.replace(body);
   return { ok: true, jobs: store.db.jobs.length };
 });
@@ -365,9 +524,10 @@ route('POST', '/api/llm/chat', async ({ body, res }) => {
   }
 
   if (!started) {
-    const msg = error?.cause?.code === 'ECONNREFUSED' || error?.message === 'fetch failed'
-      ? `Could not reach LM Studio at ${settings.lmUrl}. Click "Start LM Studio" in the sidebar.`
-      : error?.message || 'The model returned an empty response';
+    const unreachable = error?.cause?.code === 'ECONNREFUSED' || error?.message === 'fetch failed';
+    const msg = !unreachable ? error?.message || 'The model returned an empty response'
+      : usesBuiltin(settings) ? 'The built-in AI stopped responding. Try again; it restarts by itself.'
+        : `Could not reach LM Studio at ${settings.lmUrl}. Click "Start LM Studio" in the sidebar.`;
     throw new HttpError(502, msg);
   }
   if (error && !upstream.signal.aborted && !res.destroyed) res.write(`\n\n**Error:** ${error.message}`);
@@ -465,10 +625,11 @@ server.on('error', (e) => {
 server.listen(PORT, HOST, () => {
   listening = true;
   console.log(`Job Search Dashboard ${pkg.version} running at ${APP_URL}`);
-  console.log(`Data: ${DATA_DIR} | LM Studio: ${store.db.settings.lmUrl}`);
+  console.log(`Data: ${path.dirname(store.file)} | AI: ${store.db.settings.engine || 'not chosen yet'}${store.db.settings.engine === 'lmstudio' ? ` at ${store.db.settings.lmUrl}` : ''}`);
   if (store.recovery) console.warn('Data file was damaged:', store.recovery);
   if (shouldOpen && !AFTER_UPDATE) openWindow();
   // If no window ever connects (e.g. it failed to open), don't linger in the background.
   scheduleQuit(AFTER_UPDATE ? 60000 : 120000);
   setTimeout(updater.cleanup, 3000);
+  warmUpEngine();
 });
