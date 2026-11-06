@@ -150,7 +150,10 @@ export function mountEnginePanel(el, { getSettings, compact = false, onPickModel
 export async function chooseEngine({ current = '' } = {}) {
   const s = eng.status || await refreshEngine().catch(() => null);
   const model = s?.models?.[0];
-  const size = s && model ? gb(setupSize(s, model)) : 'about 2.6 GB';
+  const remaining = s && model ? setupSize(s, model) : null;
+  const download = remaining === 0
+    ? `${esc(model.name)} is already on this computer, so it's ready right away.`
+    : `Downloads ${esc(model?.name || 'the model')} once (${remaining ? gb(remaining) : 'about 2.6 GB'}).`;
   const supported = s?.supported !== false;
   const dlg = $('#dialog');
   dlg.innerHTML = `<form method="dialog" class="engine-choice"><h2>How should the AI run?</h2>
@@ -158,7 +161,7 @@ export async function chooseEngine({ current = '' } = {}) {
     <div class="choices">
       <label class="choice"><input type="radio" name="engine" value="builtin" ${supported ? '' : 'disabled'} ${current !== 'lmstudio' && supported ? 'checked' : ''}>
         <div><strong>Built-in AI${supported ? ' (recommended)' : ''}</strong>
-        <div class="small muted">${supported ? `Nothing else to install. Downloads ${esc(model?.name || 'the model')} once (${size}). Works best with 8 GB of memory or more.` : 'Needs 64-bit Windows.'}</div></div></label>
+        <div class="small muted">${supported ? `Nothing else to install. ${download} Works best with 8 GB of memory or more.` : 'Needs 64-bit Windows.'}</div></div></label>
       <label class="choice"><input type="radio" name="engine" value="lmstudio" ${current === 'lmstudio' || !supported ? 'checked' : ''}>
         <div><strong>LM Studio</strong>
         <div class="small muted">Use your own LM Studio app and pick any model you like. Good if you already use it or want bigger models.</div></div></label>
