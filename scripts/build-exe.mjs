@@ -26,8 +26,14 @@ await build({
   platform: 'node',
   format: 'cjs',
   target: 'node22',
-  // Only read when not packaged; defined so the CJS bundle doesn't warn about import.meta.
-  define: { 'import.meta.url': '"file:///packaged/server.js"' },
+  define: {
+    // Only read when not packaged; defined so the CJS bundle doesn't warn about import.meta.
+    'import.meta.url': '"file:///packaged/server.js"',
+    // Google sign-in for Drive sync (a "Desktop app" OAuth client). Set these when building, e.g. from
+    // GitHub secrets in the release workflow; without them the exe has no Google sync.
+    'process.env.JSD_GOOGLE_CLIENT_ID': JSON.stringify(process.env.JSD_GOOGLE_CLIENT_ID || ''),
+    'process.env.JSD_GOOGLE_CLIENT_SECRET': JSON.stringify(process.env.JSD_GOOGLE_CLIENT_SECRET || ''),
+  },
   logLevel: 'warning',
 });
 

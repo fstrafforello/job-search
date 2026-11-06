@@ -31,7 +31,13 @@ jobs:
 
       - run: npm ci
 
+      - run: npm test
+
+      # The Google sign-in client for Drive sync comes from the repository's Actions secrets.
       - run: npm run build:exe
+        env:
+          JSD_GOOGLE_CLIENT_ID: ${{ secrets.JSD_GOOGLE_CLIENT_ID }}
+          JSD_GOOGLE_CLIENT_SECRET: ${{ secrets.JSD_GOOGLE_CLIENT_SECRET }}
 
       # Written here rather than with GitHub's generated notes, whose API has failed with server errors.
       - name: Write release notes

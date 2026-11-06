@@ -25,7 +25,9 @@ Everything is free and runs on your own computer. Nothing is sent to the interne
 
 Your data is saved in `%APPDATA%\Job Search Dashboard` (Settings → **Open data folder**). You can move the .exe anywhere; your data stays where it is. The built-in AI's files are in `%LOCALAPPDATA%\Job Search Dashboard\Built-in AI` and stay there through updates.
 
-**Same data on several computers:** in Settings → **Your data**, click **Change folder…** and pick a folder that OneDrive, Google Drive or Dropbox keeps in sync. On the other computer, pick the same folder and choose **Use that data**. Use the app on one computer at a time. It warns you if the data is open elsewhere, and when the sync app brings in changes from the other computer, the open app reloads them.
+**Same data on several computers:** in Settings → **Sync with Google Drive**, click **Sign in with Google**, then do the same on your other computers. The data is kept in a hidden app folder in your own Google Drive; the app can't see your other files. Changes sync a few seconds after you make them, every few minutes, and when you close the app. Edits from different computers are merged item by item: a job edited on one computer and another job edited on the other both keep their changes. Settings that belong to one computer (the AI choice, LM Studio address, context length) aren't synced. See the [privacy policy](https://fstrafforello.github.io/job-search/privacy.html).
+
+Without a Google account, you can instead pick a folder that OneDrive, Google Drive or Dropbox keeps in sync, in Settings → **Your data** → **Change folder…**. On the other computer, pick the same folder and choose **Use that data**. Use the app on one computer at a time. It warns you if the data is open elsewhere, and when the sync app brings in changes from the other computer, the open app reloads them.
 
 **If Windows blocks the download with no "Run anyway" option** (common on managed work computers), build and install it from the code instead. You need [Node.js](https://nodejs.org) 25.5+ and [Git](https://git-scm.com):
 
@@ -39,6 +41,19 @@ npm run install-app      # builds the app, installs it for your user, adds Start
 A copy built on your own computer isn't marked as downloaded, so it isn't blocked the same way. Check your employer's software policy first. Remove it with `npm run install-app -- --uninstall` (your data is kept).
 
 **Updates:** when a new version is out, an *Update available* card appears at the bottom left. Click **Update now**. The app downloads the new version, restarts itself, and keeps all your data. Get the first copy from the [Releases page](https://github.com/fstrafforello/job-search/releases/latest).
+
+## Google Drive sync setup (maintainers)
+
+Sync needs a Google Cloud OAuth client. It's free. Set it up once:
+
+1. In [Google Cloud Console](https://console.cloud.google.com), create a project and enable the **Google Drive API**.
+2. **Google Auth Platform → Branding:** app name *Job Search Dashboard*, your support email, homepage `https://fstrafforello.github.io/job-search/`, privacy policy `https://fstrafforello.github.io/job-search/privacy.html` (the `docs/` folder; turn on GitHub Pages for `main` → `/docs`).
+3. **Audience:** *External*. While it's in *Testing*, only the test users you add can sign in, and their sign-in expires after 7 days. Click **Publish app** for everyone.
+4. **Data access:** add the scopes `.../auth/drive.appdata`, `openid` and `.../auth/userinfo.email`. All are non-sensitive, so no security assessment is needed.
+5. **Clients → Create client → Desktop app.** Copy the client ID and secret.
+6. In the GitHub repo, **Settings → Secrets and variables → Actions**, add `JSD_GOOGLE_CLIENT_ID` and `JSD_GOOGLE_CLIENT_SECRET`. The release workflow builds them into the exe. (For installed apps Google doesn't treat the secret as confidential; keeping it out of the code just avoids secret-scanning noise.)
+
+To try it from source, set the same two variables before `npm start`. Without them, the app works as before and Settings says Google sync isn't available.
 
 ## Build the .exe
 
@@ -105,6 +120,8 @@ The start/load/stop controls use LM Studio's `lms` CLI, which is installed with 
 | `OPEN_BROWSER` | `1` for the .exe, `0` from source | Open the browser on start |
 | `JSD_DATA_DIR` | `data` (source) / `%APPDATA%\Job Search Dashboard` (.exe) | Default data folder. Also holds the log and the pointer to a folder chosen in Settings |
 | `JSD_ENGINE_DIR` | `%LOCALAPPDATA%\Job Search Dashboard\Built-in AI` | Where the built-in AI's engine and models are downloaded |
+| `JSD_LOCAL_DIR` | `%LOCALAPPDATA%\Job Search Dashboard` | This computer's own files: the app window's profile and the Google sign-in |
+| `JSD_GOOGLE_CLIENT_ID`, `JSD_GOOGLE_CLIENT_SECRET` | none | Google OAuth "Desktop app" client for Drive sync (built into the exe at build time) |
 
 From source, all data lives in `data/db.json`, which is git-ignored. A copy of the previous version is kept in `data/db.backup.json` each time the server starts.
 
@@ -115,6 +132,10 @@ server.js          HTTP server, REST API, AI streaming proxy, data folder
 lib/store.js       JSON file persistence, data folder switching, reloads changes made by sync apps
 lib/llm.js         AI client (built-in or LM Studio) + prompt building
 lib/engine.js      Built-in AI: downloads llama.cpp + the model (pinned SHA-256), runs llama-server
+lib/sync.js        Google Drive sync: sign-in (OAuth + PKCE, token encrypted with DPAPI), appDataFolder file, sync loop
+lib/merge.js       Merges two copies of the data item by item (used by sync)
+test/              npm test: merge rules, and two computers syncing through a fake Google Drive
+docs/              Website for GitHub Pages: home page and privacy policy (needed for Google sign-in)
 lib/lms.js         LM Studio CLI control (start/stop server, load/unload models)
 lib/updater.js     Checks GitHub Releases and installs updates in place
 lib/desktop.js     App window, log file, startup error page
@@ -129,6 +150,7 @@ public/            Single-page app (vanilla JS, no build step)
   app.js           Views, AI quick actions, stats
   engine.js        Built-in AI panel and the first-start AI choice
   lmstudio.js      LM Studio panel and model picker
+  sync.js          Google Drive sync card and sidebar status
   util.js          API helper, Markdown renderer, dialogs
   charts.js        SVG/HTML charts + tooltips
 ```

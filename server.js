@@ -9,6 +9,8 @@ import { createStore, STATUSES } from './lib/store.js';
 import { buildSystemPrompt, extractJobFields, streamChat, stripThinking, usesBuiltin } from './lib/llm.js';
 import * as lms from './lib/lms.js';
 import * as engine from './lib/engine.js';
+import { LOCAL_SETTINGS } from './lib/merge.js';
+import { createSync } from './lib/sync.js';
 import { createUpdater } from './lib/updater.js';
 import { logToFile, openAppWindow, openUrl, showErrorWindow } from './lib/desktop.js';
 import { extractDocumentText } from './lib/extract.js';
@@ -25,7 +27,9 @@ const PORT = Number(process.env.PORT) || 5177;
 const HOST = process.env.HOST || '127.0.0.1';
 const LOG_FILE = path.join(DATA_DIR, 'app.log');
 // The app window's browser profile: machine-local, separate from the user's own browser.
-const WINDOW_PROFILE = path.join(process.env.LOCALAPPDATA || DATA_DIR, 'Job Search Dashboard', 'Window');
+// Things that belong to this computer only (never in a synced data folder).
+const LOCAL_DIR = process.env.JSD_LOCAL_DIR || path.join(process.env.LOCALAPPDATA || DATA_DIR, 'Job Search Dashboard');
+const WINDOW_PROFILE = path.join(LOCAL_DIR, 'Window');
 
 // The packaged app has no console: log to a file, and explain startup failures in the app window.
 let listening = false;
@@ -60,7 +64,19 @@ function chosenDataDir() {
 }
 
 const DB_FILE = process.env.DB_FILE || path.join(chosenDataDir() || DATA_DIR, 'db.json');
-const store = createStore(DB_FILE, { appVersion: pkg.version, onExternalChange: () => notifyPages('data-changed') });
+let sync = null; // created right after the store, which already saves while starting
+const store = createStore(DB_FILE, {
+  appVersion: pkg.version,
+  onExternalChange: () => notifyPages('data-changed'),
+  onSave: () => sync?.schedule(),
+});
+// Google Drive sync (lib/sync.js). The sign-in is kept on this computer, encrypted for this Windows user.
+sync = createSync({
+  store,
+  tokenFile: path.join(LOCAL_DIR, 'google-sync.json'),
+  redirectUri: `http://127.0.0.1:${PORT}/api/sync/callback`,
+  onRemoteChange: () => notifyPages('data-changed'),
+});
 const updater = createUpdater({
   version: pkg.version,
   repo: pkg.repository.url.match(/github\.com\/([^/]+\/[^/.]+)/)[1],
@@ -110,6 +126,17 @@ function findJob(id) {
   const job = store.db.jobs.find((j) => j.id === id);
   if (!job) throw new HttpError(404, 'Job not found');
   return job;
+}
+
+// For sync (lib/merge.js): remember what was deleted when, and when each profile/settings field changed,
+// so the other computer's copy can't bring back a deleted item or an older value.
+function markDeleted(id) {
+  store.db.deleted[id] = now();
+}
+function stampChanges(section, before, after, skip = []) {
+  for (const k of Object.keys(after)) {
+    if (!skip.includes(k) && JSON.stringify(before[k]) !== JSON.stringify(after[k])) store.db.stamps[section][k] = now();
+  }
 }
 
 // A "thread" is where chat + documents live: either a job or the general assistant.
@@ -163,6 +190,39 @@ route('GET', '/api/bootstrap', () => ({
   openElsewhere: store.openElsewhere(),
   recovery: store.recovery,
 }));
+
+// ---------- Google Drive sync ----------
+
+route('GET', '/api/sync/status', () => sync.status());
+route('POST', '/api/sync/now', () => sync.syncNow().then(() => sync.status()));
+route('POST', '/api/sync/signout', ({ body }) => sync.signOut({ deleteFromDrive: body.deleteFromDrive === true }));
+
+// Opens Google's sign-in page in the default browser, where the user is usually signed in to Google already.
+route('POST', '/api/sync/signin', () => {
+  const url = sync.signInUrl();
+  openUrl(url);
+  return { url };
+});
+
+// Google sends the browser back here after sign-in; the tab shows the result and can be closed.
+route('GET', '/api/sync/callback', async ({ req, res }) => {
+  let result;
+  try {
+    result = await sync.handleCallback(new URL(req.url, 'http://x').searchParams);
+  } catch (e) {
+    console.error('Google sign-in failed:', e);
+    result = { ok: false, message: `Sign-in failed: ${e.message}` };
+  }
+  if (result.ok) notifyPages('sync-changed');
+  const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+  res.end(`<!doctype html><html><head><meta charset="utf-8"><title>Job Search Dashboard</title>
+    <style>body{font:16px/1.5 "Segoe UI",system-ui,sans-serif;max-width:520px;margin:80px auto;padding:0 24px;color:#1a1a1a;background:#f4f4f1}
+    h1{font-size:20px}</style></head><body>
+    <h1>${result.ok ? 'You’re signed in' : 'Sign-in didn’t work'}</h1><p>${esc(result.message)}</p>
+    <p>You can close this tab and go back to Job Search Dashboard.</p></body></html>`);
+  return undefined;
+});
 
 // ---------- data folder ----------
 
@@ -265,9 +325,10 @@ let quitTimer = null;
 function scheduleQuit(ms) {
   if (!AUTO_QUIT) return;
   clearTimeout(quitTimer);
-  quitTimer = setTimeout(() => {
+  quitTimer = setTimeout(async () => {
     if (openPages.size || ['downloading', 'installing', 'restarting'].includes(updater.status().state)) return;
     console.log('No window open, quitting');
+    await sync.flush(); // upload the last changes first
     process.exit(0);
   }, ms);
 }
@@ -330,8 +391,10 @@ route('PUT', '/api/jobs/:id', ({ params, body }) => {
 });
 
 route('DELETE', '/api/jobs/:id', ({ params }) => {
-  findJob(params.id);
+  const job = findJob(params.id);
   store.db.jobs = store.db.jobs.filter((j) => j.id !== params.id);
+  markDeleted(job.id);
+  for (const d of job.documents || []) markDeleted(d.id);
   store.save();
   return { ok: true };
 });
@@ -342,7 +405,9 @@ route('GET', '/api/threads/:tid', ({ params }) => {
 });
 
 route('DELETE', '/api/threads/:tid/chat', ({ params }) => {
-  findThread(params.tid).chat = [];
+  const thread = findThread(params.tid);
+  thread.chat = [];
+  thread.chatClearedAt = now();
   store.save();
   return { ok: true };
 });
@@ -370,6 +435,7 @@ route('PUT', '/api/threads/:tid/documents/:docId', ({ params, body }) => {
 route('DELETE', '/api/threads/:tid/documents/:docId', ({ params }) => {
   const t = findThread(params.tid);
   t.documents = t.documents.filter((d) => d.id !== params.docId);
+  markDeleted(params.docId);
   store.save();
   return { ok: true };
 });
@@ -383,14 +449,16 @@ route('POST', '/api/extract-text', async ({ req }) => {
 }, { raw: true });
 
 route('PUT', '/api/profile', ({ body }) => {
+  const before = { ...store.db.profile };
   for (const k of Object.keys(store.db.profile)) if (k in body) store.db.profile[k] = String(body[k] ?? '');
+  stampChanges('profile', before, store.db.profile);
   store.save();
   return store.db.profile;
 });
 
 route('PUT', '/api/settings', ({ body }) => {
   const s = store.db.settings;
-  const before = { engine: s.engine, builtinModel: s.builtinModel, builtinGpu: s.builtinGpu, contextLength: s.contextLength };
+  const before = { ...s };
   if ('engine' in body) {
     if (!['builtin', 'lmstudio'].includes(body.engine)) throw new HttpError(400, 'Unknown AI engine');
     s.engine = body.engine;
@@ -403,6 +471,7 @@ route('PUT', '/api/settings', ({ body }) => {
   for (const k of ['temperature', 'maxTokens', 'historyLimit', 'weeklyGoal', 'contextLength']) {
     if (k in body && body[k] !== '' && !Number.isNaN(Number(body[k]))) s[k] = Number(body[k]);
   }
+  stampChanges('settings', before, s, LOCAL_SETTINGS);
   store.save();
   // Free the memory when switching to LM Studio; restart with the new options otherwise.
   if (before.engine === 'builtin' && s.engine !== 'builtin') engine.stop();
@@ -445,7 +514,17 @@ route('POST', '/api/import', ({ body }) => {
   // How the AI runs belongs to this computer: keep it unless the backup has its own choice.
   const { engine: eng, builtinModel, builtinGpu } = store.db.settings;
   if (!body.settings?.engine) body.settings = { ...body.settings, engine: eng, builtinModel, builtinGpu };
-  store.replace(body);
+  // With sync, an import must win over the synced copy: what it doesn't contain counts as deleted,
+  // and its profile and settings count as just changed. (Chat messages are combined, never lost.)
+  const kept = new Set([...body.jobs, ...body.jobs.flatMap((j) => j.documents || []), ...(body.general?.documents || [])].map((x) => x.id));
+  const deleted = { ...store.db.deleted, ...body.deleted };
+  for (const x of [...store.db.jobs, ...store.db.jobs.flatMap((j) => j.documents || []), ...store.db.general.documents]) {
+    if (!kept.has(x.id)) deleted[x.id] = now();
+  }
+  const stamps = { profile: {}, settings: {} };
+  for (const k of Object.keys(body.profile || {})) stamps.profile[k] = now();
+  for (const k of Object.keys(body.settings || {})) if (!LOCAL_SETTINGS.includes(k)) stamps.settings[k] = now();
+  store.replace({ ...body, deleted, stamps });
   return { ok: true, jobs: store.db.jobs.length };
 });
 

@@ -3,6 +3,7 @@ import { columnChart, barList, installTooltips } from './charts.js';
 import { refreshLm, mountModelPicker, setLmActive } from './lmstudio.js';
 import { refreshEngine, mountEnginePanel, setEngineActive, startSetup, chooseEngine } from './engine.js';
 import { checkForUpdate } from './update.js';
+import { refreshSync, mountSyncCard, mountSyncBadge } from './sync.js';
 
 const main = $('#main');
 const state = { statuses: [], profile: {}, settings: {} };
@@ -875,11 +876,12 @@ async function settings() {
           <label class="row small" style="gap:6px"><input type="checkbox" id="auto-updates" ${s.checkUpdates ? 'checked' : ''}> Check automatically when the app starts</label>
         </div>
       </div>
+      <div class="card"><h2>Sync with Google Drive</h2><div id="sync-card"></div></div>
       <div class="card"><h2>Your data</h2>
         <p class="small muted" style="margin-top:0">${state.customDataDir ? 'Saved in the folder you chose' : 'Saved on this computer'}: <code>${esc(state.dataDir)}</code>.
           Updating the app keeps your data, and a copy from before each update is kept in the same folder.</p>
-        <p class="small muted">To use the same data on more than one computer, put it in a folder that OneDrive, Google Drive or Dropbox keeps in sync,
-          and choose that folder on each computer. Use the app on one computer at a time: close it on one before opening it on the other.</p>
+        <p class="small muted">Another way to use the same data on several computers, without signing in: put it in a folder that OneDrive, Google Drive or Dropbox keeps in sync,
+          and choose that folder on each computer. Then use the app on one computer at a time. (With Google Drive sync above you don't need this.)</p>
         <div class="row"><button type="button" class="btn" id="change-folder">Change folder…</button>
           ${state.customDataDir ? '<button type="button" class="btn ghost" id="default-folder">Back to this computer only</button>' : ''}
           <button type="button" class="btn ghost" id="open-folder">Open data folder</button></div>
@@ -896,6 +898,7 @@ async function settings() {
     </form>`;
 
   const f = $('#sf');
+  mountSyncCard($('#sync-card'));
   f.querySelectorAll('input[name="engine"]').forEach((r) => r.addEventListener('change', () => switchEngine(r.value).then(settings)));
   if (s.engine === 'builtin') {
     mountEnginePanel($('#engine-settings'), {
@@ -1125,6 +1128,7 @@ function keepAlive() {
   let lost = null;
   es.onopen = () => { clearTimeout(lost); $('#closed').hidden = true; };
   // A sync client (OneDrive, Google Drive…) brought in changes from another computer.
+  es.addEventListener('sync-changed', () => refreshSync());
   es.addEventListener('data-changed', async () => {
     await boot();
     toast('Updated with changes from another computer');
@@ -1151,6 +1155,7 @@ installTooltips();
 window.addEventListener('hashchange', route);
 boot().then(() => {
   mountAiSidebar();
+  mountSyncBadge($('#sync-badge'));
   keepAlive();
   if (state.recovery) showRecoveryNotice(state.recovery);
   else if (state.locationProblem || state.openElsewhere) showDataNotices();

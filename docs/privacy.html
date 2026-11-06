@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Privacy Policy · Job Search Dashboard</title>
+  <style>
+    :root { --bg: #f4f4f1; --text: #1a1a1a; --muted: #52514e; --accent: #2a78d6; }
+    @media (prefers-color-scheme: dark) { :root { --bg: #121211; --text: #f0efec; --muted: #c3c2b7; --accent: #3987e5; } }
+    body { font: 16px/1.6 "Segoe UI", system-ui, -apple-system, sans-serif; max-width: 720px; margin: 0 auto; padding: 40px 16px 80px; background: var(--bg); color: var(--text); }
+    h1 { font-size: 28px; margin-bottom: 4px; } h2 { font-size: 19px; margin-top: 32px; }
+    a { color: var(--accent); } .muted { color: var(--muted); } code { font-size: 14px; }
+  </style>
+</head>
+<body>
+  <p><a href="./">← Job Search Dashboard</a></p>
+  <h1>Privacy Policy</h1>
+  <p class="muted">Last updated: 6 November 2026</p>
+
+  <p>Job Search Dashboard is a free, open-source desktop app for tracking job applications. It is made by Francesco Strafforello
+    and runs entirely on your own computer. There is no account with us, no server of ours, and no analytics or tracking.</p>
+
+  <h2>What the app stores, and where</h2>
+  <p>Your jobs, documents, chat history, profile (such as your resume) and settings are saved in a file on your computer,
+    by default in <code>%APPDATA%\Job Search Dashboard</code>, or in a folder you choose.</p>
+  <p>The AI features run on your computer, either with the app's built-in AI or with LM Studio. What you write and your resume are
+    processed there and are not sent to the internet.</p>
+
+  <h2>Google Drive sync (optional)</h2>
+  <p>If you choose <strong>Sign in with Google</strong>, the app asks Google for these permissions only:</p>
+  <ul>
+    <li><code>drive.appdata</code>: to create and update one file (<code>job-search-data.json</code>) in the app's hidden folder in your own Google Drive.
+      The app cannot see, read or change any other file in your Drive.</li>
+    <li><code>openid</code> and <code>email</code>: to show which Google account you are signed in with.</li>
+  </ul>
+  <p>The synced file contains the same data the app keeps on your computer (except settings that only concern that computer).
+    It goes directly between your computer and Google. We never receive it.</p>
+  <p>Your Google sign-in is stored on your computer, encrypted with Windows' protection for your user account. You can sign out at any time
+    in Settings, and choose to delete the copy in your Google Drive. You can also remove the app's access at
+    <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>.</p>
+  <p>The app's use of information received from Google APIs adheres to the
+    <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, including the Limited Use requirements.
+    Data from Google is used only to provide sync to you. It is not transferred to anyone else, not used for advertising, and not read by people.</p>
+
+  <h2>Connections the app makes</h2>
+  <ul>
+    <li><strong>GitHub</strong>, to check for updates (asks only for the latest version number) and to download updates and the built-in AI engine.</li>
+    <li><strong>Hugging Face</strong>, to download the built-in AI model, once, if you choose the built-in AI.</li>
+    <li><strong>Google</strong>, only if you turn on Google Drive sync.</li>
+  </ul>
+  <p>None of these requests include your job search data.</p>
+
+  <h2>Deleting your data</h2>
+  <p>Delete the app's data folder (Settings → Open data folder) to remove your data from your computer. To remove the synced copy,
+    sign out in Settings and choose "Sign out and delete", or remove the app's access in your Google account.</p>
+
+  <h2>Contact</h2>
+  <p>Questions: open an issue at <a href="https://github.com/fstrafforello/job-search/issues">github.com/fstrafforello/job-search/issues</a>.</p>
+</body>
+</html>
