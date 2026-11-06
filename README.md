@@ -116,8 +116,15 @@ scripts/make-icons.mjs  Renders the icon PNGs/ICO
 scripts/pe.mjs     Exe header tweaks (no console window, drop Node's signature)
 .github/workflows/release.yml  Builds and publishes the exe when a v* tag is pushed
 scripts/build-exe.mjs  Bundles everything into a single executable
+scripts/licenses.mjs   Generates public/third-party-licenses.txt (also run by build:exe)
 public/            Single-page app (vanilla JS, no build step)
   app.js           Views, AI quick actions, stats
   util.js          API helper, Markdown renderer, dialogs
   charts.js        SVG/HTML charts + tooltips
 ```
+
+## Licence
+
+Apache License 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE). Copyright 2026 Francesco Strafforello.
+
+The exe also contains the Node.js runtime and the npm packages under `dependencies` (mammoth, unpdf/pdf.js and what they use), each under its own licence. Their full texts are in [public/third-party-licenses.txt](public/third-party-licenses.txt), which the app shows under Settings → About. After adding or upgrading a dependency, run `npm run licenses` and commit the result; `npm run build:exe` also refreshes it.

@@ -865,6 +865,13 @@ async function settings() {
           <button type="button" class="btn ghost" id="open-folder">Open data folder</button>
           <label class="btn">Import JSON…<input type="file" id="import" accept=".json,application/json" hidden></label></div>
       </div>
+      <div class="card"><h2>About</h2>
+        <p class="small muted" style="margin-top:0">Job Search Dashboard ${esc(state.version)} · Copyright 2026 Francesco Strafforello.
+          Free and open source under the <a href="https://www.apache.org/licenses/LICENSE-2.0" target="_blank" rel="noopener">Apache License 2.0</a>.
+          Source code: <a href="https://github.com/fstrafforello/job-search" target="_blank" rel="noopener">github.com/fstrafforello/job-search</a>.</p>
+        <p class="small muted">It includes the Node.js runtime, mammoth (Word files) and pdf.js through unpdf (PDF files), each under its own licence.</p>
+        <div class="row"><a class="btn ghost" href="/third-party-licenses.txt" target="_blank" rel="noopener">View all licences</a></div>
+      </div>
     </form>`;
 
   const f = $('#sf');

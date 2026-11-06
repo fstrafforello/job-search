@@ -31,7 +31,9 @@ await build({
   logLevel: 'warning',
 });
 
-// 2. Embed every file in public/ as an asset, keyed by its URL path.
+// 2. Refresh public/third-party-licenses.txt for the Node.js runtime and packages going into this exe,
+//    then embed every file in public/ as an asset, keyed by its URL path.
+execFileSync(process.execPath, [path.join(ROOT, 'scripts', 'licenses.mjs')], { cwd: ROOT, stdio: 'inherit' });
 const assets = {};
 for (const f of fs.readdirSync(path.join(ROOT, 'public'), { recursive: true })) {
   const full = path.join(ROOT, 'public', f);
@@ -56,7 +58,7 @@ if (IS_WIN) {
       InternalName: 'JobSearchDashboard',
       OriginalFilename: NAME,
       CompanyName: '',
-      LegalCopyright: '',
+      LegalCopyright: 'Copyright 2026 Francesco Strafforello. Apache License 2.0.',
     },
   });
 }
