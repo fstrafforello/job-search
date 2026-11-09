@@ -6,36 +6,241 @@
   <title>Job Search Dashboard</title>
   <!-- Google Search Console ownership check, needed for the Google sign-in consent screen -->
   <meta name="google-site-verification" content="PgKKhSDk171wXyuj9a2RBjpvfzP78sbanvWlQNVywSQ" />
-  <meta name="description" content="A free, private desktop app for tracking job applications, with a local AI that helps with resumes and cover letters.">
+  <meta name="description" content="A free desktop app for Windows and Mac that tracks your job applications, with an AI that runs on your own computer to tailor resumes, write cover letters and prepare for interviews.">
+  <meta property="og:title" content="Job Search Dashboard">
+  <meta property="og:description" content="Track your job applications, with an AI that runs on your own computer. Free for Windows and Mac.">
+  <meta property="og:image" content="https://fstrafforello.github.io/job-search/img/dashboard.png">
   <link rel="icon" href="icon-192.png">
+  <link rel="preload" href="fonts/bricolage.woff2" as="font" type="font/woff2" crossorigin>
   <style>
-    :root { --bg: #f4f4f1; --surface: #fcfcfb; --border: #dedcd5; --text: #1a1a1a; --muted: #52514e; --accent: #2a78d6; }
-    @media (prefers-color-scheme: dark) { :root { --bg: #121211; --surface: #1a1a19; --border: #34332f; --text: #f0efec; --muted: #c3c2b7; --accent: #3987e5; } }
-    body { font: 16px/1.6 "Segoe UI", system-ui, -apple-system, sans-serif; max-width: 760px; margin: 0 auto; padding: 48px 16px 80px; background: var(--bg); color: var(--text); }
-    header { display: flex; align-items: center; gap: 14px; } header img { width: 56px; height: 56px; }
-    h1 { font-size: 30px; margin: 0; } .muted { color: var(--muted); } a { color: var(--accent); }
-    .btn { display: inline-block; background: var(--accent); color: #fff; padding: 10px 18px; border-radius: 8px; text-decoration: none; font-weight: 600; margin: 8px 8px 0 0; }
-    .btn.ghost { background: transparent; color: var(--accent); border: 1px solid var(--border); }
-    ul { padding-left: 20px; } li { margin: 6px 0; }
-    footer { margin-top: 48px; font-size: 14px; }
+    @font-face { font-family: "Bricolage Grotesque"; src: url(fonts/bricolage.woff2) format("woff2"); font-weight: 500 800; font-display: swap; }
+    @font-face { font-family: "Atkinson Hyperlegible"; src: url(fonts/atkinson-400.woff2) format("woff2"); font-weight: 400; font-display: swap; }
+    @font-face { font-family: "Atkinson Hyperlegible"; src: url(fonts/atkinson-700.woff2) format("woff2"); font-weight: 700; font-display: swap; }
+
+    :root {
+      --paper: #f6f8fc;
+      --surface: #ffffff;
+      --ink: #16203a;
+      --slate: #586379;
+      --blue: #3b5bdb;
+      --blue-ink: #ffffff;
+      --line: #dce2ee;
+      --shadow: 0 30px 60px -20px rgb(22 32 58 / .28), 0 12px 24px -12px rgb(22 32 58 / .18);
+      /* The app's own status colours */
+      --s-saved: #7a7974; --s-applied: #2a78d6; --s-screening: #6250d6; --s-interview: #8a3fb8; --s-offer: #1f7a35;
+      --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+      --text: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+      color-scheme: light;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --paper: #0f1424; --surface: #161c30; --ink: #e7ecf7; --slate: #a3adc2;
+        --blue: #7c93f0; --blue-ink: #0f1424; --line: #273049;
+        --shadow: 0 30px 60px -20px rgb(0 0 0 / .6), 0 12px 24px -12px rgb(0 0 0 / .5);
+        --s-saved: #9a9992; --s-applied: #5b9be6; --s-screening: #8f81e8; --s-interview: #b47bd8; --s-offer: #4fae66;
+        color-scheme: dark;
+      }
+    }
+
+    * { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
+    body { margin: 0; background: var(--paper); color: var(--ink); font: 18px/1.6 var(--text); overflow-x: clip; }
+    a { color: var(--blue); text-underline-offset: 3px; }
+    a:focus-visible, .btn:focus-visible { outline: 3px solid var(--blue); outline-offset: 3px; border-radius: 6px; }
+    img { display: block; max-width: 100%; height: auto; }
+    h1, h2, h3 { font-family: var(--display); color: var(--ink); margin: 0; }
+    h2 { font-size: clamp(1.75rem, 3vw, 2.25rem); font-weight: 700; line-height: 1.1; letter-spacing: -0.015em; }
+    h3 { font-size: 1.15rem; font-weight: 650; line-height: 1.3; }
+    p { margin: 0; }
+
+    .wrap { width: min(1160px, 100% - 32px); margin-inline: auto; }
+
+    /* Top bar */
+    .top { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-block: 22px; }
+    .brand { display: flex; align-items: center; gap: 10px; font: 700 1.05rem/1 var(--display); color: var(--ink); text-decoration: none; }
+    .brand img { width: 34px; height: 34px; }
+    .top a.plain { color: var(--slate); font-size: .95rem; text-decoration: none; white-space: nowrap; }
+    .top a.plain:hover { color: var(--ink); }
+
+    /* Hero: words on the left, the real app bleeding off the right edge */
+    .hero { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); padding-right: 0; gap: clamp(32px, 5vw, 64px); align-items: center; padding-block: clamp(32px, 6vw, 72px) clamp(48px, 7vw, 96px); }
+    .hero h1 { font-size: clamp(2.5rem, 5vw, 4rem); font-weight: 760; line-height: 1.0; letter-spacing: -0.03em; font-variation-settings: "opsz" 96; }
+    .lead { margin-top: 22px; font-size: 1.15rem; color: var(--slate); max-width: 34ch; }
+    .actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 32px; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 9px; padding: 13px 18px; border-radius: 10px; font: 600 .97rem/1 var(--display); white-space: nowrap; text-decoration: none; border: 1.5px solid var(--blue); color: var(--blue); background: transparent; }
+    .btn.primary { background: var(--blue); color: var(--blue-ink); }
+    .btn:hover { filter: brightness(1.07); }
+    .btn svg { width: 18px; height: 18px; flex: none; }
+    .fine { margin-top: 14px; font-size: .9rem; color: var(--slate); }
+    .shot { border-radius: 14px; border: 1px solid var(--line); box-shadow: var(--shadow); background: var(--surface); overflow: hidden; }
+    /* Runs off the right edge of the window: the real app is the picture. */
+    .hero .shot { width: calc(100% + max(16px, (100vw - 1160px) / 2)); max-width: none; border-right: 0; border-radius: 14px 0 0 14px; }
+
+    /* The application steps, as the app shows them */
+    .flow { border-block: 1px solid var(--line); padding-block: 36px; }
+    .flow-inner { display: grid; grid-template-columns: minmax(0, 4fr) minmax(0, 8fr); gap: 40px; align-items: center; }
+    .flow p { color: var(--slate); max-width: 38ch; }
+    .steps { list-style: none; margin: 0; padding: 0; display: flex; justify-content: space-between; position: relative; }
+    .steps::before { content: ""; position: absolute; left: 9px; right: 9px; top: 9px; height: 2px; background: var(--line); }
+    .steps li { position: relative; display: flex; flex-direction: column; align-items: center; gap: 10px; font: 600 .95rem/1 var(--display); color: var(--ink); }
+    .steps li::before { content: ""; width: 20px; height: 20px; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 5px var(--paper); }
+    @media (prefers-reduced-motion: no-preference) {
+      .steps li::before { animation: light .5s ease-out both; animation-delay: calc(var(--i) * 180ms + 300ms); }
+      @keyframes light { from { transform: scale(.4); opacity: 0; } }
+    }
+
+    /* What it does */
+    section { padding-block: clamp(56px, 8vw, 104px); }
+    .features { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: clamp(32px, 5vw, 72px); align-items: start; }
+    .features dl { margin: 28px 0 0; display: grid; gap: 26px; }
+    .features dt { font: 650 1.15rem/1.3 var(--display); }
+    .features dd { margin: 6px 0 0; color: var(--slate); max-width: 44ch; }
+
+    /* Private by design */
+    .private { background: var(--surface); border-block: 1px solid var(--line); }
+    .facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: clamp(24px, 4vw, 48px); margin-top: 36px; }
+    .facts p { margin-top: 8px; color: var(--slate); }
+    .private .more { margin-top: 32px; }
+
+    /* Install */
+    .install { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: clamp(24px, 4vw, 56px); margin-top: 36px; }
+    .install ol { margin: 14px 0 0; padding-left: 1.3em; display: grid; gap: 10px; color: var(--slate); }
+    .install ol strong { color: var(--ink); }
+    .install .after { margin-top: 14px; font-size: .95rem; color: var(--slate); }
+
+    footer { border-top: 1px solid var(--line); padding-block: 28px 40px; color: var(--slate); font-size: .95rem; }
+    footer ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px 28px; }
+    footer a { color: var(--slate); }
+
+    @media (max-width: 860px) {
+      body { font-size: 17px; }
+      .hero, .features, .flow-inner { grid-template-columns: 1fr; }
+      .hero .shot { width: 100%; border-right: 1px solid var(--line); border-radius: 14px; }
+      .actions .btn { flex: 1 1 100%; }
+      .long { display: none; }
+      .facts, .install { grid-template-columns: 1fr; }
+      .steps li { font-size: .8rem; }
+    }
   </style>
 </head>
 <body>
-  <header><img src="icon-192.png" alt=""><div><h1>Job Search Dashboard</h1><div class="muted">Free, private and open source. Windows and Mac.</div></div></header>
-  <p>Track your job applications and let an AI that runs on your own computer help with tailored resumes, cover letters,
-    interview prep and follow-up emails. Your data stays with you.</p>
-  <p><a class="btn" href="https://github.com/fstrafforello/job-search/releases/latest/download/JobSearchDashboard.exe">Download for Windows</a>
-    <a class="btn" href="https://github.com/fstrafforello/job-search/releases/latest/download/JobSearchDashboard-macOS-arm64.zip">Download for Mac</a>
-    <a class="btn ghost" href="https://github.com/fstrafforello/job-search">Source code</a></p>
-  <p class="muted" style="font-size:14px">Mac: Apple Silicon (M1 or newer). The app isn't registered with Apple, so the first time,
-    allow it in System Settings → Privacy &amp; Security → <strong>Open Anyway</strong>.
-    <a href="https://github.com/fstrafforello/job-search#for-users-mac">Install help</a></p>
-  <ul>
-    <li><strong>Jobs:</strong> paste a job description and the AI fills in title, company, salary and keywords. Track status, notes, contacts and next steps.</li>
-    <li><strong>AI help per job:</strong> fit analysis with a match score, keyword gap check, tailored resume, cover letter, recruiter messages and interview prep.</li>
-    <li><strong>Built-in AI:</strong> set up with one click and works offline. Or use your own LM Studio.</li>
-    <li><strong>Your data, your computers:</strong> optionally sync through a hidden app folder in your own Google Drive.</li>
-  </ul>
-  <footer class="muted"><a href="privacy.html">Privacy Policy</a> · Apache License 2.0 · © 2026 Francesco Strafforello</footer>
+  <header class="wrap top">
+    <a class="brand" href="./"><img src="icon-192.png" alt="">Job Search Dashboard</a>
+    <a class="plain" href="https://github.com/fstrafforello/job-search"><span class="long">Source on </span>GitHub</a>
+  </header>
+
+  <main>
+    <div class="wrap hero">
+      <div>
+        <h1>Your job search, on your own computer.</h1>
+        <p class="lead">Track every application, and let an AI that runs on your computer tailor your resume, write cover letters and prepare you for interviews. Free, with nothing you write sent to the internet.</p>
+        <div class="actions" id="downloads">
+          <a class="btn primary" data-os="windows" href="https://github.com/fstrafforello/job-search/releases/latest/download/JobSearchDashboard.exe">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 5.5 10 4.5v7H3zM11 4.4 21 3v8.5H11zM3 12.5h7v7l-7-1zM11 12.5h10V21l-10-1.4z"/></svg>
+            Download for Windows</a>
+          <a class="btn" data-os="mac" href="https://github.com/fstrafforello/job-search/releases/latest/download/JobSearchDashboard-macOS-arm64.zip">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M16.4 12.7c0-2.4 2-3.6 2.1-3.7-1.2-1.7-3-1.9-3.6-2-1.5-.2-3 .9-3.8.9-.8 0-2-.9-3.3-.9-1.7 0-3.3 1-4.2 2.6-1.8 3.1-.5 7.7 1.3 10.2.9 1.2 1.9 2.6 3.2 2.6 1.3-.1 1.8-.8 3.3-.8s2 .8 3.3.8c1.4 0 2.3-1.3 3.1-2.5 1-1.4 1.4-2.8 1.4-2.9-.1 0-2.8-1-2.8-4.3zM14 5.4c.7-.8 1.2-2 1-3.1-1 0-2.2.7-2.9 1.5-.6.7-1.2 1.9-1 3 1.1.1 2.2-.6 2.9-1.4z"/></svg>
+            Download for Mac</a>
+        </div>
+        <p class="fine">For Windows 10 and 11, and Macs with Apple Silicon (M1 or newer).</p>
+      </div>
+      <img class="shot" src="img/dashboard.png" width="2560" height="1600"
+        alt="The dashboard: totals for jobs tracked, applications, response and interview rates and offers, a chart of applications per week, and the pipeline of jobs by status.">
+    </div>
+
+    <div class="flow">
+      <div class="wrap flow-inner">
+        <p>Every job moves through the same steps. The dashboard shows where each one stands and what to do next.</p>
+        <ol class="steps" aria-label="Application steps">
+          <li style="--c: var(--s-saved); --i: 0">Saved</li>
+          <li style="--c: var(--s-applied); --i: 1">Applied</li>
+          <li style="--c: var(--s-screening); --i: 2">Screening</li>
+          <li style="--c: var(--s-interview); --i: 3">Interview</li>
+          <li style="--c: var(--s-offer); --i: 4">Offer</li>
+        </ol>
+      </div>
+    </div>
+
+    <section class="wrap features" aria-labelledby="what">
+      <div>
+        <h2 id="what">Help with every application</h2>
+        <dl>
+          <div><dt>Paste a job, get the details</dt>
+            <dd>Paste a job description, or load it from a PDF or Word file, and the AI fills in the title, company, salary and key skills.</dd></div>
+          <div><dt>Know how well you fit</dt>
+            <dd>A match score with your strengths and gaps for the role, plus the keywords your resume is missing.</dd></div>
+          <div><dt>Write it in minutes</dt>
+            <dd>A tailored resume, a cover letter, recruiter messages, follow-up and thank-you emails, interview questions and salary advice, all based on your real experience.</dd></div>
+          <div><dt>Built-in AI, or your own</dt>
+            <dd>One click sets up an AI that runs on your computer and works offline. Already use LM Studio? Pick it instead.</dd></div>
+        </dl>
+      </div>
+      <img class="shot" src="img/job-ai.png" width="2560" height="1600" loading="lazy"
+        alt="A job's AI workspace: a fit analysis with a match score of 86 out of 100, strong matches, gaps to address and next steps, next to buttons for tailoring a resume, writing a cover letter and preparing for interviews.">
+    </section>
+
+    <section class="private" aria-labelledby="privacy">
+      <div class="wrap">
+        <h2 id="privacy">Private by design</h2>
+        <div class="facts">
+          <div><h3>Your data stays with you</h3>
+            <p>Jobs, documents and your resume are saved on your computer. There's no account to create and no server of ours.</p></div>
+          <div><h3>The AI runs on your computer</h3>
+            <p>Your resume and the job descriptions are processed locally, by the built-in AI or LM Studio.</p></div>
+          <div><h3>Sync only if you want it</h3>
+            <p>To use more than one computer, sign in with Google. Your data goes to a hidden app folder in your own Google Drive, and nowhere else.</p></div>
+        </div>
+        <p class="more"><a href="privacy.html">Read the privacy policy</a></p>
+      </div>
+    </section>
+
+    <section class="wrap" aria-labelledby="install">
+      <h2 id="install">Install</h2>
+      <div class="install">
+        <div>
+          <h3>Windows</h3>
+          <ol>
+            <li>Download <strong>JobSearchDashboard.exe</strong> and double-click it.</li>
+            <li>If Windows shows "Windows protected your PC", click <strong>More info</strong>, then <strong>Run anyway</strong>. This appears because the app isn't code-signed.</li>
+            <li>Choose how the AI runs. The built-in AI downloads once, about 2.6 GB.</li>
+          </ol>
+          <p class="after">New versions install from inside the app.</p>
+        </div>
+        <div>
+          <h3>Mac</h3>
+          <ol>
+            <li>Download the zip, open it, and drag <strong>Job Search Dashboard</strong> into Applications.</li>
+            <li>Open it. The first time, macOS blocks it because the app isn't registered with Apple. Go to <strong>System Settings, Privacy &amp; Security</strong> and click <strong>Open Anyway</strong>.</li>
+            <li>Choose how the AI runs. On Apple Silicon the built-in AI uses the Mac's GPU.</li>
+          </ol>
+          <p class="after">Stuck? See the <a href="https://github.com/fstrafforello/job-search#for-users-mac">Mac install help</a>.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="wrap">
+    <ul>
+      <li><a href="privacy.html">Privacy policy</a></li>
+      <li><a href="https://github.com/fstrafforello/job-search">Source code</a></li>
+      <li><a href="https://github.com/fstrafforello/job-search/releases">All versions</a></li>
+      <li>Free and open source under the Apache License 2.0</li>
+      <li>© 2026 Francesco Strafforello</li>
+    </ul>
+  </footer>
+
+  <script>
+    // Put the download for this visitor's computer first.
+    (function () {
+      var p = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || '';
+      if (!/mac/i.test(p)) return;
+      var box = document.getElementById('downloads');
+      var mac = box.querySelector('[data-os="mac"]');
+      var win = box.querySelector('[data-os="windows"]');
+      mac.classList.add('primary');
+      win.classList.remove('primary');
+      box.insertBefore(mac, win);
+    })();
+  </script>
 </body>
 </html>
