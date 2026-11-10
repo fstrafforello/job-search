@@ -61,7 +61,7 @@ jobs:
           body_path: release-notes.md
           fail_on_unmatched_files: true
 
-  # The Apple Silicon Mac app, added to the release the Windows job just published.
+  # The Mac app (universal: Apple Silicon and Intel), added to the release the Windows job just published.
   build-mac:
     needs: build
     runs-on: macos-latest
@@ -84,5 +84,8 @@ jobs:
       - name: Add the Mac app to the release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/JobSearchDashboard-macOS-arm64.zip
+          # The universal app, plus the same file under the name version 1.4.0 looks for.
+          files: |
+            dist/JobSearchDashboard-macOS.zip
+            dist/JobSearchDashboard-macOS-arm64.zip
           fail_on_unmatched_files: true

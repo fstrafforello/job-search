@@ -46,16 +46,16 @@ A copy built on your own computer isn't marked as downloaded, so it isn't blocke
 
 ## For users (Mac)
 
-For Macs with Apple Silicon (M1 or newer). On an Intel Mac, run it from source (below).
+For any Mac with macOS 13.5 (Ventura) or newer, Apple Silicon or Intel: the app is universal.
 
-1. From the [Releases page](https://github.com/fstrafforello/job-search/releases/latest), download **JobSearchDashboard-macOS-arm64.zip**. Double-click it to unzip, and drag **Job Search Dashboard** into your **Applications** folder.
+1. From the [Releases page](https://github.com/fstrafforello/job-search/releases/latest), download **JobSearchDashboard-macOS.zip**. Double-click it to unzip, and drag **Job Search Dashboard** into your **Applications** folder.
 2. Open it. The first time, macOS says it can't check the app for malicious software, because the app isn't registered with Apple (that costs $99 a year). Click **Done**, then:
    - open **System Settings → Privacy & Security**, scroll down to *"Job Search Dashboard" was blocked*, click **Open Anyway** and confirm with your password.
    - If macOS instead says the app *is damaged*, open **Terminal** and run `xattr -dr com.apple.quarantine "/Applications/Job Search Dashboard.app"`, then open it again.
 
    After that it opens normally.
 3. The dashboard opens in a Chrome, Edge or Brave app window if you have one of them, otherwise in a Safari tab. The app has no Dock icon; close its window to quit.
-4. Everything else works as on Windows. The built-in AI uses the Mac's GPU (Metal) and works best with 16 GB of memory (8 GB is enough for the Light model). Google Drive sync keeps its sign-in in your Keychain.
+4. Everything else works as on Windows. On Apple Silicon the built-in AI uses the Mac's GPU (Metal) and works best with 16 GB of memory (8 GB is enough for the Light model). On an Intel Mac it runs on the CPU and is slower: the Light model or LM Studio works better there. Google Drive sync keeps its sign-in in your Keychain.
 
 Your data is in `~/Library/Application Support/Job Search Dashboard`. **Updates:** the *Update available* card has a **Download** button. Download the new zip and replace the app in Applications; your data stays.
 
@@ -83,7 +83,7 @@ npm run build:exe    # → dist/JobSearchDashboard.exe (~100 MB, includes the No
 
 The exe is a normal windowed Windows program (no console) with the icon from `assets/icon.ico`. When started, it opens the dashboard in a Microsoft Edge app window (Chrome or the default browser as fallbacks). That window uses its own profile in `%LOCALAPPDATA%\Job Search Dashboard\Window`. The app quits about 15 seconds after its last window closes. Logs go to `%APPDATA%\Job Search Dashboard\app.log`. If startup fails, the error is shown in the app window.
 
-On a Mac, the same command builds `dist/JobSearchDashboard-macOS-arm64.zip` holding **Job Search Dashboard.app**: the program is signed ad hoc (no Apple Developer ID), given an icon made from `public/icon-512.png`, and zipped. GitHub Actions builds both on every push to `main` (`.github/workflows/check.yml`; the apps are under the run's *Artifacts* for a week) and for each release.
+On a Mac, the same command builds `dist/JobSearchDashboard-macOS.zip` holding a universal **Job Search Dashboard.app**: the program is built for Apple Silicon and, from the official Node.js Intel binary (checked against nodejs.org's SHA-256), for Intel, joined with `lipo`, signed ad hoc (no Apple Developer ID), given an icon made from `public/icon-512.png`, and zipped. GitHub Actions builds both on every push to `main` (`.github/workflows/check.yml`; the apps are under the run's *Artifacts* for a week) and for each release.
 
 To change the icon, edit `assets/icon.svg` (and `icon-small.svg` for 16–32 px), then run `npm run icons` to regenerate `assets/icon.ico` and the `public/icon-*.png` files (needs Edge).
 

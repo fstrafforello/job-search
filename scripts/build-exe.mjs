@@ -1,5 +1,5 @@
 // Builds the app with the server and web UI inside: dist/JobSearchDashboard.exe on Windows,
-// dist/JobSearchDashboard-macOS-<arch>.zip (holding "Job Search Dashboard.app") on a Mac.
+// dist/JobSearchDashboard-macOS.zip (holding a universal "Job Search Dashboard.app") on a Mac.
 // Usage: npm run build:exe   (needs Node >= 25.5 for --build-sea, and esbuild from devDependencies)
 import fs from 'node:fs';
 import path from 'node:path';
@@ -71,32 +71,73 @@ if (IS_WIN) {
   });
 }
 
-// On a Mac, Node's own binary is signed: the signature has to come off before the app is put inside,
-// and the result is signed again "ad hoc" (no developer identity), which Apple Silicon requires to run it.
-if (IS_MAC) {
-  base = path.join(DIST, 'base');
-  fs.copyFileSync(process.execPath, base);
-  execFileSync('codesign', ['--remove-signature', base]);
+// 4. Produce the executable: the bundle and assets injected into a copy of a Node.js binary (`base`).
+//    The code cache speeds up start-up but only works on the build machine's own kind of processor.
+function buildSea(baseExe, output, useCodeCache = true) {
+  const configFile = path.join(DIST, 'sea-config.json');
+  fs.writeFileSync(configFile, JSON.stringify({
+    main: rel(bundle),
+    output: rel(output),
+    ...(baseExe && { executable: rel(baseExe) }),
+    disableExperimentalSEAWarning: true,
+    useCodeCache,
+    assets,
+  }, null, 2));
+  execFileSync(process.execPath, ['--build-sea', rel(configFile)], { cwd: ROOT, stdio: 'inherit' });
+  fs.rmSync(configFile);
 }
 
-const configFile = path.join(DIST, 'sea-config.json');
-fs.writeFileSync(configFile, JSON.stringify({
-  main: rel(bundle),
-  output: rel(path.join(DIST, NAME)),
-  ...(base && { executable: rel(base) }),
-  disableExperimentalSEAWarning: true,
-  useCodeCache: true,
-  assets,
-}, null, 2));
+let output = path.join(DIST, NAME);
+if (IS_MAC) {
+  // One "universal" program holding both an Apple Silicon and an Intel version; each Mac runs its own.
+  // Node's binaries are signed: the signature comes off before the app is put inside, and the result is
+  // signed again "ad hoc" (no developer identity), which Apple Silicon requires to run it.
+  const slices = [];
+  for (const arch of ['arm64', 'x64']) {
+    const macBase = path.join(DIST, `base-${arch}`);
+    if (arch === process.arch) fs.copyFileSync(process.execPath, macBase);
+    else await downloadNode(arch, macBase);
+    execFileSync('codesign', ['--remove-signature', macBase]);
+    const slice = path.join(DIST, `${NAME}-${arch}`);
+    buildSea(macBase, slice, arch === process.arch);
+    fs.rmSync(macBase);
+    slices.push(slice);
+  }
+  execFileSync('lipo', ['-create', ...slices, '-output', output]);
+  for (const s of slices) fs.rmSync(s);
+  output = makeMacApp(output);
+} else {
+  buildSea(base, output);
+  // On Windows it's marked as a GUI program so no console window opens.
+  if (IS_WIN) setGuiSubsystem(output);
+}
 
-// 4. Produce the executable. On Windows it's marked as a GUI program so no console window opens.
-execFileSync(process.execPath, ['--build-sea', rel(configFile)], { cwd: ROOT, stdio: 'inherit' });
-if (IS_WIN) setGuiSubsystem(path.join(DIST, NAME));
-
-for (const f of [bundle, configFile, base]) if (f) fs.rmSync(f);
-const output = IS_MAC ? makeMacApp(path.join(DIST, NAME)) : path.join(DIST, NAME);
+for (const f of [bundle, base]) if (f) fs.rmSync(f, { force: true });
 const size = (fs.statSync(output).size / 1024 / 1024).toFixed(0);
 console.log(`\nBuilt ${rel(output)} (${size} MB, ${Object.keys(assets).length} embedded files)`);
+
+// The official Node.js binary of the same version for another processor (e.g. Intel on an Apple Silicon
+// build machine), checked against nodejs.org's published SHA-256.
+async function downloadNode(arch, dest) {
+  const v = process.version;
+  const name = `node-${v}-darwin-${arch}`;
+  const url = `https://nodejs.org/dist/${v}/`;
+  console.log(`Downloading ${name}…`);
+  const sums = await (await fetch(`${url}SHASUMS256.txt`)).text();
+  const expected = sums.split('\n').find((l) => l.endsWith(`  ${name}.tar.gz`))?.split(' ')[0];
+  if (!expected) throw new Error(`nodejs.org has no ${name}.tar.gz`);
+  const res = await fetch(`${url}${name}.tar.gz`);
+  if (!res.ok) throw new Error(`Download of ${name} failed (${res.status})`);
+  const tgz = Buffer.from(await res.arrayBuffer());
+  const { createHash } = await import('node:crypto');
+  if (createHash('sha256').update(tgz).digest('hex') !== expected) throw new Error(`${name}.tar.gz failed its checksum`);
+  const tgzFile = path.join(DIST, `${name}.tar.gz`);
+  fs.writeFileSync(tgzFile, tgz);
+  execFileSync('tar', ['-xzf', tgzFile, '-C', DIST, `${name}/bin/node`]);
+  fs.renameSync(path.join(DIST, name, 'bin', 'node'), dest);
+  fs.rmSync(path.join(DIST, name), { recursive: true });
+  fs.rmSync(tgzFile);
+}
 
 // 5. Mac: wrap the program in "Job Search Dashboard.app" (icon, name, version) and zip it for download.
 // The app isn't signed with an Apple Developer ID, so the first time macOS asks the user to allow it.
@@ -130,7 +171,7 @@ function makeMacApp(binary) {
     CFBundlePackageType: 'APPL',
     CFBundleShortVersionString: pkg.version,
     CFBundleVersion: pkg.version,
-    LSMinimumSystemVersion: '13.0',
+    LSMinimumSystemVersion: '13.5', // what the Node.js runtime inside needs
     NSHumanReadableCopyright: 'Copyright 2026 Francesco Strafforello. Apache License 2.0.',
   };
   const lines = Object.entries(entries).map(([k, v]) => `  <key>${k}</key><string>${xml(v)}</string>`);
@@ -146,7 +187,9 @@ function makeMacApp(binary) {
   ].join('\n'));
 
   execFileSync('codesign', ['--force', '--deep', '--sign', '-', app], { stdio: 'inherit' });
-  const zip = path.join(DIST, `JobSearchDashboard-macOS-${process.arch}.zip`);
+  const zip = path.join(DIST, 'JobSearchDashboard-macOS.zip');
   execFileSync('ditto', ['-c', '-k', '--keepParent', app, zip]);
+  // Version 1.4.0 (Apple Silicon only) looks for this name when checking for updates.
+  fs.copyFileSync(zip, path.join(DIST, 'JobSearchDashboard-macOS-arm64.zip'));
   return zip;
 }
