@@ -49,7 +49,7 @@ A copy built on your own computer isn't marked as downloaded, so it isn't blocke
 For any Mac with macOS 13.5 (Ventura) or newer, Apple Silicon or Intel: the app is universal.
 
 1. From the [Releases page](https://github.com/fstrafforello/job-search/releases/latest), download **JobSearchDashboard-macOS.zip**. Double-click it to unzip, and drag **Job Search Dashboard** into your **Applications** folder.
-2. Open it. The first time, macOS says it can't check the app for malicious software, because the app isn't registered with Apple (that costs $99 a year). Click **Done**, then:
+2. Open it. The first time, macOS says it can't check the app for malicious software, because the app isn't registered with Apple. Click **Done**, then:
    - open **System Settings → Privacy & Security**, scroll down to *"Job Search Dashboard" was blocked*, click **Open Anyway** and confirm with your password.
    - If macOS instead says the app *is damaged*, open **Terminal** and run `xattr -dr com.apple.quarantine "/Applications/Job Search Dashboard.app"`, then open it again.
 
