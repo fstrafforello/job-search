@@ -1,6 +1,6 @@
 {
   "name": "job-search-dashboard",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "private": true,
   "license": "Apache-2.0",
   "description": "Local job search dashboard with resume, cover letter and interview help from a built-in local AI or LM Studio",
